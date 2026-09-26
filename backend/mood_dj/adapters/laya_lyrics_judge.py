@@ -15,15 +15,15 @@ already used in `laya_decision_engine.py`):
 - "score": answer holds `{"score": <expected index as float>}` over an ordered criteria list.
 
 `predict_batch` shares a single forward pass across requests with an identical question
-schema (see `Router._question_schema`), so `judge_lyrics` builds one schema for tone+fit
-and reuses it across every track in the batch.
+schema (see `Router._question_schema`), so `judge_tone` and `judge_fit` each build one
+schema for their own question and reuse it across every track in the batch.
 """
 
 from __future__ import annotations
 
 from mood_dj.domain.models import Strategy
 from mood_dj.domain.playlist_strategy import PlaylistSignals
-from mood_dj.ports.lyrics_judge import JudgeProgressCallback, TrackJudgment, TrackLyrics
+from mood_dj.ports.lyrics_judge import JudgeProgressCallback, TrackFit, TrackLyrics, TrackTone
 
 MODEL_NAME = "multilingual"
 
@@ -33,9 +33,9 @@ QUESTION_SET_VERSION = "v1"
 
 DEFAULT_LYRICS_TRUNCATE_CHARS = 1500
 
-# `judge_lyrics` splits its work into chunks of this size, calling `predict_batch`
-# once per chunk and reporting progress after each one, so a large playlist reports
-# incremental progress instead of blocking silently for the whole batch.
+# `judge_tone` and `judge_fit` split their work into chunks of this size, calling
+# `predict_batch` once per chunk and reporting progress after each one, so a large
+# batch reports incremental progress instead of blocking silently for the whole run.
 DEFAULT_BATCH_SIZE = 8
 
 # Score levels for lyrics tone, index 0..4, normalized to 0.0-1.0.
@@ -124,23 +124,57 @@ class LayaLyricsJudge:
         )
         return signals, probabilities
 
-    def judge_lyrics(
+    def judge_tone(
         self,
-        prompt: str,
-        strategy: Strategy,
         tracks: list[TrackLyrics],
         on_progress: JudgeProgressCallback | None = None,
-    ) -> list[TrackJudgment]:
+    ) -> list[TrackTone]:
         if not tracks:
             return []
 
-        fit_instructions = STRATEGY_FIT_INSTRUCTIONS[strategy.value]
         questions = {
             "tone": {
                 "type": "score",
                 "instructions": "What is the emotional tone of these song lyrics?",
                 "criteria": TONE_LEVELS,
             },
+        }
+        max_index = len(TONE_LEVELS) - 1
+        tones: list[TrackTone] = []
+
+        for start in range(0, len(tracks), self._batch_size):
+            chunk = tracks[start : start + self._batch_size]
+            requests = [
+                {
+                    "state": {"lyrics": item.text[: self._lyrics_truncate_chars]},
+                    "questions": questions,
+                    "model": MODEL_NAME,
+                }
+                for item in chunk
+            ]
+            results = self._router.predict_batch(requests)
+
+            for item, result in zip(chunk, results):
+                tone = max(0.0, min(1.0, float(result["answers"]["tone"]["score"]) / max_index))
+                tones.append(TrackTone(track_id=item.track.id, tone=tone))
+
+            if on_progress is not None:
+                on_progress(len(chunk))
+
+        return tones
+
+    def judge_fit(
+        self,
+        prompt: str,
+        strategy: Strategy,
+        tracks: list[TrackLyrics],
+        on_progress: JudgeProgressCallback | None = None,
+    ) -> list[TrackFit]:
+        if not tracks:
+            return []
+
+        fit_instructions = STRATEGY_FIT_INSTRUCTIONS[strategy.value]
+        questions = {
             "fit": {
                 "type": "noul",
                 "instructions": f"Do these lyrics fit what the listener asked for? {fit_instructions}",
@@ -150,8 +184,7 @@ class LayaLyricsJudge:
                 },
             },
         }
-        max_index = len(TONE_LEVELS) - 1
-        judgments: list[TrackJudgment] = []
+        fits: list[TrackFit] = []
 
         for start in range(0, len(tracks), self._batch_size):
             chunk = tracks[start : start + self._batch_size]
@@ -169,12 +202,9 @@ class LayaLyricsJudge:
             results = self._router.predict_batch(requests)
 
             for item, result in zip(chunk, results):
-                answers = result["answers"]
-                tone = max(0.0, min(1.0, float(answers["tone"]["score"]) / max_index))
-                fit = float(answers["fit"]["noul"])
-                judgments.append(TrackJudgment(track_id=item.track.id, tone=tone, fit=fit))
+                fits.append(TrackFit(track_id=item.track.id, fit=float(result["answers"]["fit"]["noul"])))
 
             if on_progress is not None:
                 on_progress(len(chunk))
 
-        return judgments
+        return fits

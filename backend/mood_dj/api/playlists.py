@@ -1,37 +1,35 @@
-"""Playlist listing and preparation endpoints, requiring a logged-in session."""
+"""Playlist listing, saving, and recommend-job status endpoints, requiring a logged-in session."""
 
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from mood_dj.api.deps import (
-    get_current_tokens,
-    get_job_manager,
-    get_playlists_client,
-    get_recommend_job_manager,
-    get_session_id,
-)
+from mood_dj.api.deps import get_current_tokens, get_playlists_client, get_recommend_job_manager, get_session_id
 from mood_dj.api.schemas import (
+    DetectedEmotionResponse,
+    DetectedResponse,
+    DetectedSituationResponse,
+    DetectedTargetResponse,
     ExcludedResponse,
     PlaylistRecommendResponse,
     PlaylistStageResponse,
     PlaylistSummaryResponse,
     PlaylistTrackResponse,
-    PrepareStatusResponse,
-    RecommendFromPlaylistRequest,
-    RecommendJobStartedResponse,
     RecommendJobStatusResponse,
+    SavePlaylistRequest,
+    SavePlaylistResponse,
 )
-from mood_dj.application.prepare_job_manager import PrepareJobManager
-from mood_dj.application.recommend_from_playlist import PlaylistRecommendation
+from mood_dj.application.recommend_from_library import PlaylistRecommendation
 from mood_dj.application.recommend_job_manager import RecommendJobManager
-from mood_dj.domain.models import PrepareState, SpotifyTokens
-from mood_dj.ports.spotify_playlists import SpotifyPlaylistsClient
+from mood_dj.domain.models import SpotifyTokens
+from mood_dj.ports.spotify_playlists import SpotifyApiError, SpotifyPlaylistsClient
+
+SPOTIFY_PERMISSION_ERROR_DETAIL = (
+    "Missing permission to create playlists on Spotify. Please reconnect your Spotify account."
+)
 
 router = APIRouter(prefix="/playlists", tags=["playlists"])
 recommend_jobs_router = APIRouter(prefix="/recommend-jobs", tags=["playlists"])
-
-NOT_PREPARED_DETAIL = "Playlist not prepared yet. Call POST /playlists/{id}/prepare first."
 
 
 def _to_response(recommendation: PlaylistRecommendation) -> PlaylistRecommendResponse:
@@ -49,18 +47,37 @@ def _to_response(recommendation: PlaylistRecommendation) -> PlaylistRecommendRes
                         album=ranked.track.album,
                         cover_url=ranked.track.cover_url,
                         external_url=ranked.track.external_url,
-                        keep_probability=ranked.fit,
-                        tone=ranked.tone,
+                        keep_probability=ranked.similarity,
                     )
                     for ranked in stage.tracks
                 ],
             )
             for stage in recommendation.stages
         ],
+        detected=DetectedResponse(
+            emotion=DetectedEmotionResponse(
+                id=recommendation.detected.emotion.id,
+                label=recommendation.detected.emotion.label,
+                confidence=recommendation.detected.emotion.confidence,
+            ),
+            family_id=recommendation.detected.family_id,
+            situation=DetectedSituationResponse(
+                id=recommendation.detected.situation.id,
+                label=recommendation.detected.situation.label,
+                confidence=recommendation.detected.situation.confidence,
+            ),
+            target=DetectedTargetResponse(
+                valence=recommendation.detected.target.valence,
+                arousal=recommendation.detected.target.arousal,
+            ),
+        ),
         excluded=ExcludedResponse(
             no_lyrics=recommendation.excluded_no_lyrics,
             instrumental=recommendation.excluded_instrumental,
+            no_profile=recommendation.excluded_no_profile,
         ),
+        qualifying_count=recommendation.qualifying_count,
+        threshold=recommendation.threshold,
     )
 
 
@@ -78,48 +95,22 @@ def list_playlists(
     ]
 
 
-@router.post("/{playlist_id}/prepare")
-def prepare_playlist(
-    playlist_id: str,
+@router.post("/save", response_model=SavePlaylistResponse, status_code=201)
+def save_playlist(
+    request: SavePlaylistRequest,
     tokens: SpotifyTokens = Depends(get_current_tokens),
-    job_manager: PrepareJobManager = Depends(get_job_manager),
+    playlists_client: SpotifyPlaylistsClient = Depends(get_playlists_client),
 ):
-    started = job_manager.start(playlist_id, tokens.access_token)
-    return {"started": started}
+    try:
+        user_id = playlists_client.get_current_user_id(tokens.access_token)
+        playlist_id = playlists_client.create_playlist(user_id, request.name, tokens.access_token)
+        playlists_client.add_tracks(playlist_id, request.track_ids, tokens.access_token)
+    except SpotifyApiError as exc:
+        if exc.status_code in (401, 403):
+            raise HTTPException(status_code=exc.status_code, detail=SPOTIFY_PERMISSION_ERROR_DETAIL) from exc
+        raise HTTPException(status_code=502, detail="Spotify request failed.") from exc
 
-
-@router.get("/{playlist_id}/status", response_model=PrepareStatusResponse)
-def prepare_status(
-    playlist_id: str,
-    tokens: SpotifyTokens = Depends(get_current_tokens),
-    job_manager: PrepareJobManager = Depends(get_job_manager),
-):
-    progress = job_manager.status(playlist_id)
-    return PrepareStatusResponse(
-        state=progress.state.value,
-        total=progress.total,
-        processed=progress.processed,
-        with_lyrics=progress.with_lyrics,
-        instrumental=progress.instrumental,
-        missing=progress.missing,
-        error=progress.error,
-    )
-
-
-@router.post("/{playlist_id}/recommend", response_model=RecommendJobStartedResponse, status_code=202)
-def recommend_from_playlist(
-    playlist_id: str,
-    request: RecommendFromPlaylistRequest,
-    tokens: SpotifyTokens = Depends(get_current_tokens),
-    session_id: str = Depends(get_session_id),
-    job_manager: PrepareJobManager = Depends(get_job_manager),
-    recommend_job_manager: RecommendJobManager = Depends(get_recommend_job_manager),
-):
-    if job_manager.status(playlist_id).state != PrepareState.DONE:
-        raise HTTPException(status_code=409, detail=NOT_PREPARED_DETAIL)
-
-    job_id = recommend_job_manager.start(session_id, playlist_id, request.prompt, tokens.access_token)
-    return RecommendJobStartedResponse(job_id=job_id)
+    return SavePlaylistResponse(playlist_id=playlist_id)
 
 
 @recommend_jobs_router.get("/{job_id}", response_model=RecommendJobStatusResponse)

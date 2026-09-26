@@ -7,7 +7,7 @@ from functools import lru_cache
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from mood_dj.api import auth, playlists
+from mood_dj.api import auth, library, playlists
 from mood_dj.api.deps import get_settings
 from mood_dj.api.schemas import (
     ProfileResponse,
@@ -32,6 +32,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(playlists.router)
 app.include_router(playlists.recommend_jobs_router)
+app.include_router(library.router)
 
 
 @lru_cache(maxsize=1)

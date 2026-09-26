@@ -54,8 +54,8 @@ def test_tone_ranks_sad_lyrics_below_happy_lyrics() -> None:
         TrackLyrics(track=_track("happy"), text=HAPPY_SPANISH_LYRICS),
     ]
 
-    judgments = judge.judge_lyrics("prompt", Strategy.LIFT, tracks)
-    by_id = {j.track_id: j for j in judgments}
+    tones = judge.judge_tone(tracks)
+    by_id = {t.track_id: t for t in tones}
     print(f"sad tone: {by_id['sad'].tone}, happy tone: {by_id['happy'].tone}")
 
     assert by_id["sad"].tone < by_id["happy"].tone

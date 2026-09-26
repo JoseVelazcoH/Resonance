@@ -4,21 +4,20 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from mood_dj.api.deps import (
-    get_current_tokens,
-    get_job_manager,
-    get_playlists_client,
-    get_recommend_job_manager,
-    get_session_id,
-)
+from mood_dj.api.deps import get_current_tokens, get_playlists_client, get_recommend_job_manager, get_session_id
 from mood_dj.api.main import app
-from mood_dj.application.recommend_from_playlist import (
+from mood_dj.application.recommend_from_library import (
+    Detected,
+    DetectedEmotion,
+    DetectedSituation,
+    DetectedTarget,
     PlaylistRecommendation,
     PlaylistStage,
     RankedTrack,
 )
 from mood_dj.application.recommend_job_manager import RecommendJobProgress, RecommendJobState
-from mood_dj.domain.models import PlaylistSummary, PlaylistTrack, PrepareProgress, PrepareState, SpotifyTokens, Strategy
+from mood_dj.domain.models import PlaylistSummary, PlaylistTrack, SpotifyTokens, Strategy
+from mood_dj.ports.spotify_playlists import SpotifyApiError
 
 
 class FakePlaylistsClient:
@@ -33,17 +32,23 @@ class FakePlaylistsClient:
         return []
 
 
-class FakeJobManager:
-    def __init__(self) -> None:
-        self.started: list[tuple[str, str]] = []
-        self._status = PrepareProgress(state=PrepareState.RUNNING, total=10, processed=3, with_lyrics=2, instrumental=1)
+class FakeSavePlaylistsClient:
+    def __init__(self, error: SpotifyApiError | None = None) -> None:
+        self.error = error
+        self.created: list[tuple[str, str]] = []
+        self.added: list[tuple[str, list[str]]] = []
 
-    def start(self, playlist_id: str, access_token: str) -> bool:
-        self.started.append((playlist_id, access_token))
-        return True
+    def get_current_user_id(self, access_token: str) -> str:
+        return "me"
 
-    def status(self, playlist_id: str) -> PrepareProgress:
-        return self._status
+    def create_playlist(self, user_id: str, name: str, access_token: str) -> str:
+        if self.error is not None:
+            raise self.error
+        self.created.append((user_id, name))
+        return "new-pl"
+
+    def add_tracks(self, playlist_id: str, track_ids: list[str], access_token: str) -> None:
+        self.added.append((playlist_id, track_ids))
 
 
 def teardown_function() -> None:
@@ -73,68 +78,14 @@ def test_list_playlists_returns_mapped_summaries() -> None:
     assert body[0]["name"] == "My Playlist"
 
 
-def test_prepare_endpoint_starts_job() -> None:
-    job_manager = FakeJobManager()
-    app.dependency_overrides[get_current_tokens] = lambda: SpotifyTokens(
-        access_token="tok", refresh_token="ref", expires_at=99999999999.0
-    )
-    app.dependency_overrides[get_job_manager] = lambda: job_manager
-    client = TestClient(app)
-
-    response = client.post("/playlists/pl1/prepare")
-
-    assert response.status_code == 200
-    assert response.json() == {"started": True}
-    assert job_manager.started == [("pl1", "tok")]
-
-
-def test_status_endpoint_returns_progress_counts() -> None:
-    app.dependency_overrides[get_current_tokens] = lambda: SpotifyTokens(
-        access_token="tok", refresh_token="ref", expires_at=99999999999.0
-    )
-    app.dependency_overrides[get_job_manager] = lambda: FakeJobManager()
-    client = TestClient(app)
-
-    response = client.get("/playlists/pl1/status")
-
-    body = response.json()
-    assert body["state"] == "running"
-    assert body["total"] == 10
-    assert body["processed"] == 3
-    assert body["with_lyrics"] == 2
-    assert body["instrumental"] == 1
-
-
-def test_prepare_requires_session() -> None:
-    client = TestClient(app)
-
-    response = client.post("/playlists/pl1/prepare")
-
-    assert response.status_code == 401
-
-
-def test_status_requires_session() -> None:
-    client = TestClient(app)
-
-    response = client.get("/playlists/pl1/status")
-
-    assert response.status_code == 401
-
-
-class DoneJobManager(FakeJobManager):
-    def __init__(self) -> None:
-        super().__init__()
-        self._status = PrepareProgress(state=PrepareState.DONE, total=1, processed=1, with_lyrics=1)
-
-
 class FakeRecommendJobManager:
     def __init__(self, job: RecommendJobProgress | None = None) -> None:
         self.job = job
-        self.started: list[tuple[str, str, str, str]] = []
+        self.started: list[tuple[str, str]] = []
         self.status_calls: list[tuple[str, str]] = []
 
-    def start(self, session_id, playlist_id, prompt, access_token) -> str:
-        self.started.append((session_id, playlist_id, prompt, access_token))
+    def start(self, session_id, prompt) -> str:
+        self.started.append((session_id, prompt))
         return "job-1"
 
     def status(self, job_id: str, session_id: str) -> RecommendJobProgress | None:
@@ -152,51 +103,17 @@ def _sample_recommendation() -> PlaylistRecommendation:
     return PlaylistRecommendation(
         strategy=Strategy.ACCOMPANY,
         signal_probabilities={"feels_bad": 0.9, "wants_change": 0.1, "wants_energy": 0.1, "wants_rest": 0.1},
-        stages=[PlaylistStage(name="session", tracks=[RankedTrack(track=track, tone=0.3, fit=0.8)])],
+        stages=[PlaylistStage(name="session", tracks=[RankedTrack(track=track, similarity=0.8)])],
+        detected=Detected(
+            emotion=DetectedEmotion(id="tristeza", label="Tristeza", confidence=0.8),
+            family_id="melancolia",
+            situation=DetectedSituation(id="rainy_day_home", label="Día de lluvia en casa", confidence=0.6),
+            target=DetectedTarget(valence=-0.3, arousal=-0.2),
+        ),
         excluded_no_lyrics=2,
         excluded_instrumental=1,
+        excluded_no_profile=0,
     )
-
-
-def test_recommend_requires_session() -> None:
-    client = TestClient(app)
-
-    response = client.post("/playlists/pl1/recommend", json={"prompt": "sad"})
-
-    assert response.status_code == 401
-
-
-def test_recommend_returns_409_when_not_prepared() -> None:
-    app.dependency_overrides[get_current_tokens] = lambda: SpotifyTokens(
-        access_token="tok", refresh_token="ref", expires_at=99999999999.0
-    )
-    app.dependency_overrides[get_job_manager] = lambda: FakeJobManager()  # state=running
-    app.dependency_overrides[get_session_id] = lambda: "session-1"
-    client = TestClient(app)
-
-    response = client.post("/playlists/pl1/recommend", json={"prompt": "sad"})
-
-    assert response.status_code == 409
-
-
-def test_recommend_starts_job_and_returns_job_id_when_prepared() -> None:
-    app.dependency_overrides[get_current_tokens] = lambda: SpotifyTokens(
-        access_token="tok", refresh_token="ref", expires_at=99999999999.0
-    )
-    app.dependency_overrides[get_job_manager] = lambda: DoneJobManager()
-    app.dependency_overrides[get_session_id] = lambda: "session-1"
-    job_manager = FakeRecommendJobManager()
-    app.dependency_overrides[get_recommend_job_manager] = lambda: job_manager
-    client = TestClient(app)
-
-    response = client.post("/playlists/pl1/recommend", json={"prompt": "I feel sad"})
-
-    assert response.status_code == 202
-    assert response.json() == {"job_id": "job-1"}
-    assert len(job_manager.started) == 1
-    session_id, playlist_id, prompt, access_token = job_manager.started[0]
-    assert isinstance(session_id, str) and session_id
-    assert (playlist_id, prompt, access_token) == ("pl1", "I feel sad", "tok")
 
 
 def test_recommend_job_status_requires_session() -> None:
@@ -290,3 +207,54 @@ def test_recommend_job_status_is_scoped_to_the_caller_session() -> None:
 
     assert response.status_code == 404
     assert job_manager.status_calls == [("job-1", "session-7")]
+
+
+def test_save_playlist_requires_session() -> None:
+    client = TestClient(app)
+
+    response = client.post("/playlists/save", json={"name": "My Mood", "track_ids": ["t1"]})
+
+    assert response.status_code == 401
+
+
+def test_save_playlist_creates_playlist_and_adds_tracks() -> None:
+    app.dependency_overrides[get_current_tokens] = lambda: SpotifyTokens(
+        access_token="tok", refresh_token="ref", expires_at=99999999999.0
+    )
+    fake_client = FakeSavePlaylistsClient()
+    app.dependency_overrides[get_playlists_client] = lambda: fake_client
+    client = TestClient(app)
+
+    response = client.post("/playlists/save", json={"name": "My Mood", "track_ids": ["t1", "t2"]})
+
+    assert response.status_code == 201
+    assert response.json() == {"playlist_id": "new-pl"}
+    assert fake_client.created == [("me", "My Mood")]
+    assert fake_client.added == [("new-pl", ["t1", "t2"])]
+
+
+def test_save_playlist_returns_403_when_missing_scope() -> None:
+    app.dependency_overrides[get_current_tokens] = lambda: SpotifyTokens(
+        access_token="tok", refresh_token="ref", expires_at=99999999999.0
+    )
+    fake_client = FakeSavePlaylistsClient(error=SpotifyApiError(403, {"error": "no permission"}))
+    app.dependency_overrides[get_playlists_client] = lambda: fake_client
+    client = TestClient(app)
+
+    response = client.post("/playlists/save", json={"name": "My Mood", "track_ids": []})
+
+    assert response.status_code == 403
+    assert "reconnect" in response.json()["detail"].lower()
+
+
+def test_save_playlist_returns_502_on_other_spotify_failures() -> None:
+    app.dependency_overrides[get_current_tokens] = lambda: SpotifyTokens(
+        access_token="tok", refresh_token="ref", expires_at=99999999999.0
+    )
+    fake_client = FakeSavePlaylistsClient(error=SpotifyApiError(500, {}))
+    app.dependency_overrides[get_playlists_client] = lambda: fake_client
+    client = TestClient(app)
+
+    response = client.post("/playlists/save", json={"name": "My Mood", "track_ids": []})
+
+    assert response.status_code == 502
