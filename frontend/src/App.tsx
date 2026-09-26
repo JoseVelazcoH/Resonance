@@ -2,42 +2,61 @@ import { useEffect, useRef, useState } from "react";
 import "./App.css";
 import {
   ApiError,
+  fetchLibraryLyricsStatus,
+  fetchLibraryStatus,
   fetchMe,
   fetchPlaylists,
-  fetchPrepareStatus,
   fetchRecommendJob,
   loginUrl,
   logout,
-  preparePlaylist,
-  startRecommendJob,
+  prepareLibrary,
+  savePlaylistToSpotify,
+  startLibraryRecommendJob,
 } from "./api";
-import { PlaylistPicker } from "./components/PlaylistPicker";
-import { PlaylistResults } from "./components/PlaylistResults";
-import { PrepareProgress } from "./components/PrepareProgress";
-import { PromptForm } from "./components/PromptForm";
-import { RecommendProgress } from "./components/RecommendProgress";
+import { Header, type Screen } from "./components/Header";
+import { AnalysisScreen } from "./screens/AnalysisScreen";
+import { HomeScreen } from "./screens/HomeScreen";
+import { LoadingScreen } from "./screens/LoadingScreen";
+import { LyricsDownloadScreen } from "./screens/LyricsDownloadScreen";
+import { PlaylistScreen } from "./screens/PlaylistScreen";
+import { StartDownloadScreen } from "./screens/StartDownloadScreen";
 import type {
+  LibraryLyricsStatus,
+  LibraryStatus,
   PlaylistRecommendResponse,
   PlaylistSummary,
-  PrepareStatus,
   RecommendJobStatus,
 } from "./types/api";
 
-const POLL_INTERVAL_MS = 1500;
+const LIBRARY_POLL_INTERVAL_MS = 1500;
+const LYRICS_POLL_INTERVAL_MS = 1000;
 const RECOMMEND_POLL_INTERVAL_MS = 1000;
 
 function App() {
   const [authChecked, setAuthChecked] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
+  const [displayName, setDisplayName] = useState<string | null>(null);
+
+  const [screen, setScreen] = useState<Screen>("home");
+  const [prompt, setPrompt] = useState("");
   const [playlists, setPlaylists] = useState<PlaylistSummary[]>([]);
   const [libraryError, setLibraryError] = useState<string | null>(null);
-  const [selectedPlaylist, setSelectedPlaylist] = useState<PlaylistSummary | null>(null);
-  const [prepareStatus, setPrepareStatus] = useState<PrepareStatus | null>(null);
-  const [playlistResult, setPlaylistResult] = useState<PlaylistRecommendResponse | null>(null);
-  const [playlistLoading, setPlaylistLoading] = useState(false);
+  const [lyricsStatus, setLyricsStatus] = useState<LibraryLyricsStatus | null>(null);
+  const [libraryPrepareStatus, setLibraryPrepareStatus] = useState<LibraryStatus | null>(null);
   const [recommendStatus, setRecommendStatus] = useState<RecommendJobStatus | null>(null);
-  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const recommendPollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [playlistResult, setPlaylistResult] = useState<PlaylistRecommendResponse | null>(null);
+
+  const [isRetryingLibrary, setIsRetryingLibrary] = useState(false);
+
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [savedPlaylistId, setSavedPlaylistId] = useState<string | null>(null);
+  const [savedPlaylistName, setSavedPlaylistName] = useState<string | null>(null);
+
+  const libraryPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lyricsPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const recommendPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const libraryChecked = useRef(false);
 
   useEffect(() => {
     if (authChecked) {
@@ -46,6 +65,7 @@ function App() {
     fetchMe()
       .then((me) => {
         setLoggedIn(me.logged_in);
+        setDisplayName(me.display_name);
         setAuthChecked(true);
       })
       .catch(() => {
@@ -70,212 +90,297 @@ function App() {
       });
   }, [authChecked, loggedIn]);
 
-  useEffect(() => {
-    return () => {
-      if (pollTimerRef.current) {
-        clearInterval(pollTimerRef.current);
-      }
-      if (recommendPollTimerRef.current) {
-        clearInterval(recommendPollTimerRef.current);
-      }
-    };
-  }, []);
-
-  const stopPolling = () => {
-    if (pollTimerRef.current) {
-      clearInterval(pollTimerRef.current);
-      pollTimerRef.current = null;
+  const stopLibraryPolling = () => {
+    if (libraryPollRef.current) {
+      clearInterval(libraryPollRef.current);
+      libraryPollRef.current = null;
     }
   };
 
-  const pollStatus = (playlistId: string) => {
-    stopPolling();
-    pollTimerRef.current = setInterval(async () => {
-      try {
-        const status = await fetchPrepareStatus(playlistId);
-        setPrepareStatus(status);
-        if (status.state === "done" || status.state === "error") {
-          stopPolling();
-        }
-      } catch (err) {
-        stopPolling();
-        setLibraryError(err instanceof Error ? err.message : "Failed to check preparation status");
-      }
-    }, POLL_INTERVAL_MS);
-  };
-
-  const handleSelectPlaylist = async (playlist: PlaylistSummary) => {
-    stopPolling();
-    stopRecommendPolling();
-    setSelectedPlaylist(playlist);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-    setPlaylistResult(null);
-    setRecommendStatus(null);
-    setPlaylistLoading(false);
-    setLibraryError(null);
-    setPrepareStatus({ state: "running", total: 0, processed: 0, with_lyrics: 0, instrumental: 0, missing: 0, error: null });
-    try {
-      await preparePlaylist(playlist.id);
-      const status = await fetchPrepareStatus(playlist.id);
-      setPrepareStatus(status);
-      if (status.state !== "done" && status.state !== "error") {
-        pollStatus(playlist.id);
-      }
-    } catch (err) {
-      setLibraryError(err instanceof Error ? err.message : "Failed to prepare playlist");
+  const stopLyricsPolling = () => {
+    if (lyricsPollRef.current) {
+      clearInterval(lyricsPollRef.current);
+      lyricsPollRef.current = null;
     }
   };
 
   const stopRecommendPolling = () => {
-    if (recommendPollTimerRef.current) {
-      clearInterval(recommendPollTimerRef.current);
-      recommendPollTimerRef.current = null;
+    if (recommendPollRef.current) {
+      clearInterval(recommendPollRef.current);
+      recommendPollRef.current = null;
     }
+  };
+
+  useEffect(() => {
+    return () => {
+      stopLibraryPolling();
+      stopLyricsPolling();
+      stopRecommendPolling();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // On first login, call POST /library/prepare once (idempotent: fast when everything is
+  // already cached in SQLite) so GET /library/status reflects the real state instead of
+  // an "idle" job that never ran. If it resolves to "done" immediately we skip straight
+  // to Home; otherwise we show the start-download screen so the user's click feels like
+  // the action that "starts" the visible download, matching the Figma flow, even though
+  // the backend job was technically kicked off a moment earlier.
+  useEffect(() => {
+    if (!authChecked || !loggedIn || libraryChecked.current) {
+      return;
+    }
+    libraryChecked.current = true;
+
+    prepareLibrary()
+      .then(() => fetchLibraryStatus())
+      .then((status) => {
+        setLibraryPrepareStatus(status);
+        if (status.state === "done" && isMoodProfilingDone(status)) {
+          setScreen("home");
+        } else {
+          setScreen("start-download");
+          pollLibraryPrepareStatus();
+        }
+      })
+      .catch((err) => {
+        setLibraryError(err instanceof Error ? err.message : "Failed to prepare your library");
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authChecked, loggedIn]);
+
+  const pollLibraryPrepareStatus = () => {
+    stopLibraryPolling();
+    libraryPollRef.current = setInterval(async () => {
+      try {
+        const status = await fetchLibraryStatus();
+        if (status.state === "error") {
+          stopLibraryPolling();
+          setLibraryError(status.error ?? "Failed to prepare your library");
+        }
+      } catch (err) {
+        stopLibraryPolling();
+        setLibraryError(err instanceof Error ? err.message : "Failed to check preparation status");
+      }
+    }, LIBRARY_POLL_INTERVAL_MS);
+  };
+
+  // Mood profiling ("reading mood") happens after lyrics are fetched, so lyrics
+  // being "done" is not enough: we also need profiles_processed to have caught
+  // up to profiles_total before it's safe to move on to Home.
+  const isMoodProfilingDone = (status: LibraryStatus | null): boolean => {
+    if (!status) {
+      return false;
+    }
+    return status.profiles_total <= 0 || status.profiles_processed >= status.profiles_total;
+  };
+
+  const pollLyricsStatus = () => {
+    stopLyricsPolling();
+    lyricsPollRef.current = setInterval(async () => {
+      try {
+        const [status, libraryStatus] = await Promise.all([fetchLibraryLyricsStatus(), fetchLibraryStatus()]);
+        setLyricsStatus(status);
+        setLibraryPrepareStatus(libraryStatus);
+        // Only "done" (pending === 0) AND mood profiling caught up auto-advances
+        // to Home; "partial" keeps the user on this screen with a Retry/Continue
+        // anyway choice, since some tracks may still be missing lyrics.
+        if (status.state === "done" && isMoodProfilingDone(libraryStatus)) {
+          stopLyricsPolling();
+          stopLibraryPolling();
+          setScreen("home");
+        } else if (status.state === "error" || libraryStatus.state === "error") {
+          stopLyricsPolling();
+          stopLibraryPolling();
+          setLibraryError("Failed to download lyrics for your library");
+        } else if (status.state === "partial") {
+          setIsRetryingLibrary(false);
+        }
+      } catch (err) {
+        stopLyricsPolling();
+        setLibraryError(err instanceof Error ? err.message : "Failed to check lyrics download status");
+      }
+    }, LYRICS_POLL_INTERVAL_MS);
+  };
+
+  const handleStartDownload = () => {
+    setScreen("lyrics-download");
+    pollLyricsStatus();
+  };
+
+  const handleRetryLibrary = async () => {
+    setIsRetryingLibrary(true);
+    try {
+      await prepareLibrary();
+      pollLyricsStatus();
+    } catch (err) {
+      setLibraryError(err instanceof Error ? err.message : "Failed to retry lyrics download");
+      setIsRetryingLibrary(false);
+    }
+  };
+
+  const handleContinueAnyway = () => {
+    stopLyricsPolling();
+    stopLibraryPolling();
+    setScreen("home");
   };
 
   const pollRecommendJob = (jobId: string) => {
     stopRecommendPolling();
-    recommendPollTimerRef.current = setInterval(async () => {
+    recommendPollRef.current = setInterval(async () => {
       try {
         const status = await fetchRecommendJob(jobId);
         setRecommendStatus(status);
         if (status.state === "done") {
           stopRecommendPolling();
           setPlaylistResult(status.result);
-          setPlaylistLoading(false);
+          setScreen("analysis");
         } else if (status.state === "error") {
           stopRecommendPolling();
           setLibraryError(status.error ?? "Failed to get recommendation");
-          setPlaylistLoading(false);
         }
       } catch (err) {
         stopRecommendPolling();
-        setPlaylistLoading(false);
         setLibraryError(err instanceof Error ? err.message : "Failed to check recommendation status");
       }
     }, RECOMMEND_POLL_INTERVAL_MS);
   };
 
-  const handlePlaylistSubmit = async (prompt: string) => {
-    if (!selectedPlaylist) {
-      return;
-    }
-    setPlaylistLoading(true);
+  const handleSubmitPrompt = async (moodPrompt: string) => {
+    setPrompt(moodPrompt);
     setLibraryError(null);
     setPlaylistResult(null);
-    setRecommendStatus({ state: "running", phase: "detecting mood", processed: 0, total: 0, result: null, error: null });
+    setRecommendStatus(null);
+    setScreen("loading");
+
     try {
-      const { job_id: jobId } = await startRecommendJob(selectedPlaylist.id, prompt);
-      pollRecommendJob(jobId);
+      const { job_id } = await startLibraryRecommendJob(moodPrompt);
+      pollRecommendJob(job_id);
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
-        setLoggedIn(false);
-        setLibraryError("Your Spotify session expired. Please connect again.");
-      } else if (err instanceof ApiError && err.status === 409) {
-        setLibraryError("This playlist isn't prepared yet. Please wait for preparation to finish.");
+      setLibraryError(err instanceof Error ? err.message : "Failed to start recommendation");
+    }
+  };
+
+  const handleTryAnotherMood = () => {
+    stopRecommendPolling();
+    setSaveError(null);
+    setSavedPlaylistId(null);
+    setSavedPlaylistName(null);
+    setScreen("home");
+  };
+
+  const handleSave = async (name: string, trackIds: string[]) => {
+    setIsSaving(true);
+    setSaveError(null);
+    setSavedPlaylistId(null);
+    setSavedPlaylistName(null);
+
+    try {
+      const response = await savePlaylistToSpotify(name, trackIds);
+      setSavedPlaylistId(response.playlist_id);
+      setSavedPlaylistName(name);
+    } catch (err) {
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        setSaveError("Missing permission to save playlists. Please reconnect your Spotify account.");
       } else {
-        setLibraryError(err instanceof Error ? err.message : "Failed to get recommendation");
+        setSaveError(err instanceof Error ? err.message : "Failed to save playlist");
       }
-      setPlaylistResult(null);
-      setRecommendStatus(null);
-      setPlaylistLoading(false);
+    } finally {
+      setIsSaving(false);
     }
   };
 
   const handleLogout = async () => {
-    stopPolling();
+    try {
+      await logout();
+    } catch {
+      // Ignore network errors on logout; we clear local state regardless.
+    }
+    stopLibraryPolling();
+    stopLyricsPolling();
     stopRecommendPolling();
-    await logout().catch(() => undefined);
+    libraryChecked.current = false;
     setLoggedIn(false);
+    setDisplayName(null);
     setPlaylists([]);
-    setSelectedPlaylist(null);
-    setPrepareStatus(null);
-    setPlaylistResult(null);
+    setLyricsStatus(null);
+    setLibraryPrepareStatus(null);
     setRecommendStatus(null);
-    setPlaylistLoading(false);
+    setPlaylistResult(null);
+    setScreen("home");
   };
 
-  const promptDisabledReason = (): string | null => {
-    if (!selectedPlaylist) {
-      return "Pick one of your playlists below to start.";
+  const handleNavigate = (target: Screen) => {
+    if ((target === "analysis" || target === "playlist") && !playlistResult) {
+      return;
     }
-    if (prepareStatus?.state === "error") {
-      return "Preparing this playlist failed. Pick it again to retry.";
-    }
-    if (prepareStatus?.state !== "done") {
-      return `Reading lyrics for "${selectedPlaylist.name}"... the prompt unlocks when it finishes.`;
-    }
-    return null;
+    setScreen(target);
   };
 
-  const renderLibrary = () => {
-    if (!authChecked) {
-      return <div className="stage-tracks-empty">Checking Spotify session...</div>;
+  const renderScreen = () => {
+    if (!authChecked || !loggedIn) {
+      return <HomeScreen onSubmitPrompt={handleSubmitPrompt} />;
     }
 
-    if (!loggedIn) {
+    if (screen === "start-download") {
+      return <StartDownloadScreen onStart={handleStartDownload} />;
+    }
+
+    if (screen === "lyrics-download") {
       return (
-        <div className="connect-panel">
-          <p>Connect your Spotify account to analyze your own playlists.</p>
-          <a className="prompt-submit connect-button" href={loginUrl()}>
-            Connect Spotify
-          </a>
-        </div>
+        <LyricsDownloadScreen
+          status={lyricsStatus}
+          libraryStatus={libraryPrepareStatus}
+          onRetry={handleRetryLibrary}
+          onContinueAnyway={handleContinueAnyway}
+          isRetrying={isRetryingLibrary}
+        />
       );
     }
 
-    return (
-      <div className="library-panel">
-        <div className="library-header">
-          <span className="library-header-text">Logged in with Spotify</span>
-          <button type="button" className="example-chip" onClick={handleLogout}>
-            Log out
-          </button>
-        </div>
+    if (screen === "loading") {
+      return <LoadingScreen playlists={playlists} recommendStatus={recommendStatus} />;
+    }
 
-        {selectedPlaylist && prepareStatus && (
-          <div className="prepare-panel">
-            <div className="prepare-panel-title">Preparing "{selectedPlaylist.name}"</div>
-            <PrepareProgress status={prepareStatus} />
-          </div>
-        )}
+    if (screen === "analysis" && playlistResult) {
+      return <AnalysisScreen result={playlistResult} onViewPlaylist={() => setScreen("playlist")} />;
+    }
 
-        <PromptForm
-          onSubmit={handlePlaylistSubmit}
-          isLoading={playlistLoading}
-          disabledReason={promptDisabledReason()}
+    if (screen === "playlist" && playlistResult) {
+      return (
+        <PlaylistScreen
+          result={playlistResult}
+          moodLabel={prompt}
+          onTryAnotherMood={handleTryAnotherMood}
+          onSave={handleSave}
+          isSaving={isSaving}
+          saveError={saveError}
+          savedPlaylistId={savedPlaylistId}
+          savedPlaylistName={savedPlaylistName}
         />
+      );
+    }
 
-        {playlistLoading && recommendStatus && (
-          <div className="prepare-panel">
-            <div className="prepare-panel-title">Building your playlist</div>
-            <RecommendProgress status={recommendStatus} />
-          </div>
-        )}
-
-        {libraryError && <div className="error-banner">{libraryError}</div>}
-
-        {playlistResult && <PlaylistResults result={playlistResult} />}
-
-        <PlaylistPicker
-          playlists={playlists}
-          selectedId={selectedPlaylist?.id ?? null}
-          onSelect={handleSelectPlaylist}
-        />
-      </div>
-    );
+    return <HomeScreen onSubmitPrompt={handleSubmitPrompt} />;
   };
 
   return (
     <div className="app-shell">
-      <header className="app-header">
-        <h1 className="app-title">Laya Mood DJ</h1>
-        <p className="app-subtitle">
-          A decision model picks the strategy, target sound and tracks. No LLM ranking.
-        </p>
-      </header>
-
-      {renderLibrary()}
+      <Header
+        activeScreen={screen}
+        loggedIn={loggedIn}
+        displayName={displayName}
+        hasResult={playlistResult !== null}
+        onNavigate={handleNavigate}
+        onConnect={() => {
+          window.location.href = loginUrl();
+        }}
+        onLogout={handleLogout}
+      />
+      <div className="screen">
+        {libraryError && <div className="error-banner">{libraryError}</div>}
+        {renderScreen()}
+      </div>
     </div>
   );
 }

@@ -1,9 +1,12 @@
 import type {
+  LibraryLyricsStatus,
+  LibraryLyricsSummary,
+  LibraryStatus,
   MeResponse,
   PlaylistSummary,
-  PrepareStatus,
   RecommendJobStarted,
   RecommendJobStatus,
+  SavePlaylistResponse,
 } from "./types/api";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
@@ -55,21 +58,31 @@ export async function fetchPlaylists(): Promise<PlaylistSummary[]> {
   return requestJson<PlaylistSummary[]>("/playlists");
 }
 
-export async function preparePlaylist(playlistId: string): Promise<{ started: boolean }> {
-  return requestJson<{ started: boolean }>(`/playlists/${playlistId}/prepare`, {
+export async function prepareLibrary(): Promise<{ started: boolean }> {
+  return requestJson<{ started: boolean }>("/library/prepare", {
     method: "POST",
   });
 }
 
-export async function fetchPrepareStatus(playlistId: string): Promise<PrepareStatus> {
-  return requestJson<PrepareStatus>(`/playlists/${playlistId}/status`);
+export async function fetchLibraryStatus(): Promise<LibraryStatus> {
+  return requestJson<LibraryStatus>("/library/status");
 }
 
-export async function startRecommendJob(
-  playlistId: string,
-  prompt: string,
-): Promise<RecommendJobStarted> {
-  return requestJson<RecommendJobStarted>(`/playlists/${playlistId}/recommend`, {
+export async function fetchLibraryLyricsStatus(offset?: number, limit = 50): Promise<LibraryLyricsStatus> {
+  const params = new URLSearchParams();
+  if (offset !== undefined) {
+    params.set("offset", String(offset));
+  }
+  params.set("limit", String(limit));
+  return requestJson<LibraryLyricsStatus>(`/library/lyrics/status?${params.toString()}`);
+}
+
+export async function fetchLibraryLyricsSummary(): Promise<LibraryLyricsSummary> {
+  return requestJson<LibraryLyricsSummary>("/library/lyrics/summary");
+}
+
+export async function startLibraryRecommendJob(prompt: string): Promise<RecommendJobStarted> {
+  return requestJson<RecommendJobStarted>("/library/recommend", {
     method: "POST",
     body: JSON.stringify({ prompt }),
   });
@@ -77,4 +90,14 @@ export async function startRecommendJob(
 
 export async function fetchRecommendJob(jobId: string): Promise<RecommendJobStatus> {
   return requestJson<RecommendJobStatus>(`/recommend-jobs/${jobId}`);
+}
+
+export async function savePlaylistToSpotify(
+  name: string,
+  trackIds: string[],
+): Promise<SavePlaylistResponse> {
+  return requestJson<SavePlaylistResponse>("/playlists/save", {
+    method: "POST",
+    body: JSON.stringify({ name, track_ids: trackIds }),
+  });
 }
