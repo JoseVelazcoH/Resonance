@@ -128,3 +128,112 @@ def test_fetch_returns_none_status_when_search_also_network_errors() -> None:
     result = provider.fetch("Artist", "Title", "Album", 200.0)
 
     assert result.status is None
+
+
+def _status_error(status: int, retry_after: str | None = None) -> httpx.HTTPStatusError:
+    request = httpx.Request("GET", "https://lrclib.net/api/get")
+    headers = {"Retry-After": retry_after} if retry_after else {}
+    response = httpx.Response(status, request=request, headers=headers)
+    return httpx.HTTPStatusError(f"HTTP {status}", request=request, response=response)
+
+
+class SequencedHttpClient:
+    """Fakes `get`, returning/raising each item in `get_sequence` in order."""
+
+    def __init__(self, get_sequence: list) -> None:
+        self.get_sequence = list(get_sequence)
+        self.get_calls = 0
+
+    def get(self, params: dict):
+        item = self.get_sequence[self.get_calls]
+        self.get_calls += 1
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+    def search(self, params: dict):
+        raise AssertionError("search should not be called in these tests")
+
+
+class FakeSleeper:
+    def __init__(self) -> None:
+        self.calls: list[float] = []
+
+    def __call__(self, seconds: float) -> None:
+        self.calls.append(seconds)
+
+
+def test_fetch_retries_transient_503_then_succeeds() -> None:
+    http = SequencedHttpClient(
+        [_status_error(503), _status_error(503), {"plainLyrics": "la la la", "instrumental": False}]
+    )
+    sleeper = FakeSleeper()
+    provider = LrclibLyricsProvider(http_client=http, sleep_fn=sleeper, random_fn=lambda: 0.0)
+
+    result = provider.fetch("Artist", "Title", "Album", 200.0)
+
+    assert result.status is LyricsStatus.LYRICS
+    assert http.get_calls == 3
+    assert len(sleeper.calls) == 2
+
+
+def test_fetch_honors_retry_after_header() -> None:
+    http = SequencedHttpClient([_status_error(429, retry_after="7"), {"plainLyrics": "x", "instrumental": False}])
+    sleeper = FakeSleeper()
+    provider = LrclibLyricsProvider(http_client=http, sleep_fn=sleeper, random_fn=lambda: 0.0)
+
+    provider.fetch("Artist", "Title", "Album", 200.0)
+
+    assert sleeper.calls == [7.0]
+
+
+def test_fetch_caps_backoff_delay_at_max_delay() -> None:
+    http = SequencedHttpClient([_status_error(503)] * 4 + [{"plainLyrics": "x", "instrumental": False}])
+    sleeper = FakeSleeper()
+    provider = LrclibLyricsProvider(
+        http_client=http, max_attempts=5, base_delay_s=1.0, max_delay_s=30.0, sleep_fn=sleeper, random_fn=lambda: 1.0
+    )
+
+    provider.fetch("Artist", "Title", "Album", 200.0)
+
+    assert all(delay <= 30.0 for delay in sleeper.calls)
+
+
+def test_fetch_gives_up_after_max_attempts_and_logs_one_warning(caplog) -> None:
+    http = SequencedHttpClient([_status_error(503)] * 10)
+    sleeper = FakeSleeper()
+    provider = LrclibLyricsProvider(http_client=http, max_attempts=3, sleep_fn=sleeper, random_fn=lambda: 0.0)
+
+    with caplog.at_level("WARNING"):
+        result = provider.fetch("Artist", "Title", "Album", 200.0)
+
+    assert result.status is None
+    assert http.get_calls == 3
+    assert len(sleeper.calls) == 2
+    warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+    assert len(warnings) == 1
+    assert "giving up after 3 attempt(s)" in warnings[0].getMessage()
+
+
+def test_fetch_does_not_retry_on_404_goes_straight_to_search_fallback() -> None:
+    http = FakeHttpClient(get_error=_not_found(), search_response=[{"plainLyrics": "found", "instrumental": False}])
+    sleeper = FakeSleeper()
+    provider = LrclibLyricsProvider(http_client=http, sleep_fn=sleeper)
+
+    result = provider.fetch("Artist", "Title", "Album", 200.0)
+
+    assert result.status is LyricsStatus.LYRICS
+    assert sleeper.calls == []
+
+
+def test_fetch_retries_network_errors_like_timeouts() -> None:
+    http = SequencedHttpClient(
+        [httpx.TimeoutException("slow"), {"plainLyrics": "la", "instrumental": False}]
+    )
+    sleeper = FakeSleeper()
+    provider = LrclibLyricsProvider(http_client=http, sleep_fn=sleeper, random_fn=lambda: 0.0)
+
+    result = provider.fetch("Artist", "Title", "Album", 200.0)
+
+    assert result.status is LyricsStatus.LYRICS
+    assert len(sleeper.calls) == 1
