@@ -14,6 +14,7 @@ from typing import Protocol
 import httpx
 
 from mood_dj.domain.models import PlaylistSummary, PlaylistTrack
+from mood_dj.ports.spotify_playlists import SpotifyApiError
 
 PLAYLISTS_URL = "https://api.spotify.com/v1/me/playlists"
 CURRENT_USER_URL = "https://api.spotify.com/v1/me"
@@ -26,11 +27,23 @@ def playlist_items_url(playlist_id: str) -> str:
     return f"https://api.spotify.com/v1/playlists/{playlist_id}/items"
 
 
+def playlist_tracks_url(playlist_id: str) -> str:
+    return f"https://api.spotify.com/v1/playlists/{playlist_id}/tracks"
+
+
+def user_playlists_url(user_id: str) -> str:
+    return f"https://api.spotify.com/v1/users/{user_id}/playlists"
+
+
 class SpotifyPlaylistsHttpClient(Protocol):
-    """Thin boundary around the Spotify HTTP GET calls this adapter needs."""
+    """Thin boundary around the Spotify HTTP calls this adapter needs."""
 
     def get(self, url: str, access_token: str) -> dict:
         """Perform an authenticated GET and return the parsed JSON body."""
+        ...
+
+    def post(self, url: str, access_token: str, payload: dict) -> tuple[int, dict]:
+        """Perform an authenticated POST and return (status_code, parsed JSON body)."""
         ...
 
 
@@ -45,6 +58,19 @@ class HttpxSpotifyPlaylistsHttpClient:
         )
         response.raise_for_status()
         return response.json()
+
+    def post(self, url: str, access_token: str, payload: dict) -> tuple[int, dict]:
+        response = httpx.post(
+            url,
+            headers={"Authorization": f"Bearer {access_token}"},
+            json=payload,
+            timeout=REQUEST_TIMEOUT,
+        )
+        try:
+            body = response.json()
+        except ValueError:
+            body = {}
+        return response.status_code, body
 
 
 class SpotifyPlaylistsClient:
@@ -81,6 +107,33 @@ class SpotifyPlaylistsClient:
                     tracks.append(track)
             url = page.get("next")
         return tracks
+
+    def get_display_name(self, access_token: str) -> str | None:
+        profile = self._http_client.get(CURRENT_USER_URL, access_token)
+        return profile.get("display_name")
+
+    def get_current_user_id(self, access_token: str) -> str:
+        profile = self._http_client.get(CURRENT_USER_URL, access_token)
+        return profile["id"]
+
+    def create_playlist(self, user_id: str, name: str, access_token: str) -> str:
+        payload = {"name": name, "public": False}
+        status, body = self._http_client.post(PLAYLISTS_URL, access_token, payload)
+        if status == 404:
+            status, body = self._http_client.post(user_playlists_url(user_id), access_token, payload)
+        if status >= 400:
+            raise SpotifyApiError(status, body)
+        return body["id"]
+
+    def add_tracks(self, playlist_id: str, track_ids: list[str], access_token: str) -> None:
+        if not track_ids:
+            return
+        payload = {"uris": [f"spotify:track:{track_id}" for track_id in track_ids]}
+        status, body = self._http_client.post(playlist_items_url(playlist_id), access_token, payload)
+        if status == 404:
+            status, body = self._http_client.post(playlist_tracks_url(playlist_id), access_token, payload)
+        if status >= 400:
+            raise SpotifyApiError(status, body)
 
     def _map_playlist(self, item: dict) -> PlaylistSummary:
         images = item.get("images") or []

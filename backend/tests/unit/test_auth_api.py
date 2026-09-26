@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from mood_dj.api.deps import (
     get_auth_client,
     get_auth_state_store,
+    get_playlists_client,
     get_session_store,
     get_settings,
 )
@@ -49,6 +50,20 @@ class FakeAuthClient:
         return SpotifyTokens(access_token="access", refresh_token="refresh", expires_at=9999999999.0)
 
 
+class FakePlaylistsClient:
+    def __init__(self, display_name: str | None = "user") -> None:
+        self.display_name = display_name
+
+    def list_playlists(self, access_token: str):
+        return []
+
+    def get_playlist_tracks(self, playlist_id: str, access_token: str):
+        return []
+
+    def get_display_name(self, access_token: str) -> str | None:
+        return self.display_name
+
+
 def _settings() -> Settings:
     return Settings(
         spotify_client_id="client123",
@@ -60,11 +75,12 @@ def _settings() -> Settings:
     )
 
 
-def _override(auth_state_store=None, session_store=None, auth_client=None):
+def _override(auth_state_store=None, session_store=None, auth_client=None, playlists_client=None):
     app.dependency_overrides[get_settings] = _settings
     app.dependency_overrides[get_auth_state_store] = lambda: (auth_state_store or FakeAuthStateStore())
     app.dependency_overrides[get_session_store] = lambda: (session_store or FakeSessionStore())
     app.dependency_overrides[get_auth_client] = lambda: (auth_client or FakeAuthClient())
+    app.dependency_overrides[get_playlists_client] = lambda: (playlists_client or FakePlaylistsClient())
 
 
 def teardown_function() -> None:
@@ -90,7 +106,7 @@ def test_me_reports_logged_out_without_cookie() -> None:
     response = client.get("/auth/me")
 
     assert response.status_code == 200
-    assert response.json() == {"logged_in": False}
+    assert response.json() == {"logged_in": False, "display_name": None}
 
 
 def test_callback_exchanges_code_and_sets_session_cookie() -> None:
@@ -132,13 +148,26 @@ def test_me_reports_logged_in_after_callback() -> None:
     state_store = FakeAuthStateStore()
     state_store.save("state123", "verifier123")
     session_store = FakeSessionStore()
-    _override(auth_state_store=state_store, session_store=session_store)
+    _override(auth_state_store=state_store, session_store=session_store, playlists_client=FakePlaylistsClient("Jose"))
     client = TestClient(app, follow_redirects=False)
 
     client.get("/auth/callback", params={"code": "abc", "state": "state123"})
     response = client.get("/auth/me")
 
-    assert response.json() == {"logged_in": True}
+    assert response.json() == {"logged_in": True, "display_name": "Jose"}
+
+
+def test_me_reports_none_display_name_when_spotify_profile_unavailable() -> None:
+    state_store = FakeAuthStateStore()
+    state_store.save("state123", "verifier123")
+    session_store = FakeSessionStore()
+    _override(auth_state_store=state_store, session_store=session_store, playlists_client=FakePlaylistsClient(None))
+    client = TestClient(app, follow_redirects=False)
+
+    client.get("/auth/callback", params={"code": "abc", "state": "state123"})
+    response = client.get("/auth/me")
+
+    assert response.json() == {"logged_in": True, "display_name": None}
 
 
 def test_logout_clears_session() -> None:

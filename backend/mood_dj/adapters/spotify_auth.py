@@ -3,7 +3,8 @@
 PKCE is used so the client secret is not required for the token exchange itself
 (Spotify still accepts it, but it is not needed and this keeps the flow simpler and
 consistent with public-client best practice). Scopes requested: playlist-read-private
-and playlist-read-collaborative, the minimum needed to read the user's playlists.
+and playlist-read-collaborative to read the user's playlists, and
+playlist-modify-private to save a generated playlist back to their account.
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ from mood_dj.domain.models import SpotifyTokens
 
 AUTHORIZE_URL = "https://accounts.spotify.com/authorize"
 TOKEN_URL = "https://accounts.spotify.com/api/token"
-SCOPES = "playlist-read-private playlist-read-collaborative"
+SCOPES = "playlist-read-private playlist-read-collaborative playlist-modify-private"
 REQUEST_TIMEOUT = 10.0
 
 

@@ -9,12 +9,14 @@ from mood_dj.adapters.spotify_auth import build_authorize_url, generate_code_ver
 from mood_dj.api.deps import (
     get_auth_client,
     get_auth_state_store,
+    get_playlists_client,
     get_session_store,
     get_settings,
 )
 from mood_dj.api.schemas import MeResponse
 from mood_dj.config import SESSION_COOKIE_NAME, Settings
 from mood_dj.ports.auth_state_store import AuthStateStore
+from mood_dj.ports.spotify_playlists import SpotifyPlaylistsClient
 from mood_dj.ports.spotify_session_store import SpotifySessionStore
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -72,10 +74,15 @@ def callback(
 def me(
     request: Request,
     session_store: SpotifySessionStore = Depends(get_session_store),
+    playlists_client: SpotifyPlaylistsClient = Depends(get_playlists_client),
 ):
     session_id = request.cookies.get(SESSION_COOKIE_NAME)
-    logged_in = session_id is not None and session_store.get(session_id) is not None
-    return MeResponse(logged_in=logged_in)
+    tokens = session_store.get(session_id) if session_id is not None else None
+    if tokens is None:
+        return MeResponse(logged_in=False, display_name=None)
+
+    display_name = playlists_client.get_display_name(tokens.access_token)
+    return MeResponse(logged_in=True, display_name=display_name)
 
 
 @router.post("/logout")
