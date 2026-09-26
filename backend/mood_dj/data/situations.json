@@ -1,0 +1,194 @@
+{
+  "_meta": {
+    "method": "Same circumplex valence/arousal convention as emotions.json ([-1, 1]).",
+    "groups": "Split into two groups of at most 9 situations each so that, with the always-present none_of_these option, every Laya choice question stays at 10 options or fewer (11+ is uncalibrated): 'active_social' (higher-energy, other-facing contexts) and 'calm_personal' (lower-energy, solitary or reflective contexts).",
+    "description_format": "Each description is concrete and bilingual (English then Spanish), listing typical cues a listener actually says, so the choice-question criteria text has enough surface overlap with real prompts to be compared reliably against."
+  },
+  "groups": {
+    "active_social": [
+      {
+        "id": "party",
+        "label": "Fiesta",
+        "description": "Going to or hosting a lively party with friends: dancing, drinks, loud music, celebration, a club or a house party / Ir a una fiesta o armarla con amigos: bailar, chupe, música fuerte, pachanga, antro o reventón.",
+        "valence": 0.7,
+        "arousal": 0.75,
+        "related_emotions": [
+          "alegria",
+          "jubilo",
+          "entusiasmo",
+          "energico"
+        ]
+      },
+      {
+        "id": "workout",
+        "label": "Entrenamiento",
+        "description": "Working out or training: gym, running, lifting weights, cardio, sweating, pushing through a hard set / Entrenar o hacer ejercicio: gimnasio, correr, levantar pesas, cardio, sudar, echarle ganas a la rutina.",
+        "valence": 0.4,
+        "arousal": 0.85,
+        "related_emotions": [
+          "energico",
+          "motivacion",
+          "entusiasmo"
+        ]
+      },
+      {
+        "id": "road_trip",
+        "label": "Viaje por carretera",
+        "description": "A long road trip or drive with friends: open highway, packing the car, windows down, anticipation of a trip / Viaje largo por carretera con amigos: la autopista, cargar el coche, ventanas abajo, ganas de viajar.",
+        "valence": 0.55,
+        "arousal": 0.5,
+        "related_emotions": [
+          "libertad",
+          "entusiasmo",
+          "curiosidad"
+        ]
+      },
+      {
+        "id": "driving_at_night",
+        "label": "Manejando de noche",
+        "description": "Driving alone at night: empty roads, city lights, headlights, a solitary and moody late-night drive / Manejando solo de noche: calles vacías, luces de la ciudad, un viaje nocturno solitario y melancólico.",
+        "valence": 0.05,
+        "arousal": 0.15,
+        "related_emotions": [
+          "calma",
+          "nostalgia",
+          "concentracion"
+        ]
+      },
+      {
+        "id": "date_night",
+        "label": "Cita romántica",
+        "description": "A romantic date: dinner with a crush or partner, first date nerves, candlelight, flirting / Una cita romántica: cenar con la persona que te gusta o tu pareja, nervios de primera cita, velas, coqueteo.",
+        "valence": 0.55,
+        "arousal": 0.4,
+        "related_emotions": [
+          "amor",
+          "deseo",
+          "entusiasmo"
+        ]
+      },
+      {
+        "id": "hangout_friends",
+        "label": "Reunión con amigos",
+        "description": "Casually hanging out with friends: chatting on the couch, having a few drinks at home, laughing, no big plans / Reunión tranquila con amigos: platicar en el sillón, echar unas chelas en casa, reírse, sin planes grandes.",
+        "valence": 0.6,
+        "arousal": 0.35,
+        "related_emotions": [
+          "alegria",
+          "solidaridad",
+          "confianza"
+        ]
+      },
+      {
+        "id": "celebration",
+        "label": "Celebración",
+        "description": "Celebrating an achievement, birthday or milestone: a toast, good news, pride and joy shared with others / Celebrar un logro, cumpleaños o fecha especial: un brindis, buenas noticias, orgullo y alegría compartida.",
+        "valence": 0.75,
+        "arousal": 0.6,
+        "related_emotions": [
+          "jubilo",
+          "orgullo",
+          "felicidad"
+        ]
+      },
+      {
+        "id": "cooking",
+        "label": "Cocinando",
+        "description": "Cooking or baking at home: chopping vegetables, following a recipe, the kitchen, preparing a meal / Cocinando u horneando en casa: picar verduras, seguir una receta, la cocina, preparar la comida.",
+        "valence": 0.45,
+        "arousal": 0.25,
+        "related_emotions": [
+          "satisfaccion",
+          "concentracion",
+          "placer"
+        ]
+      }
+    ],
+    "calm_personal": [
+      {
+        "id": "movie_night",
+        "label": "Noche de película",
+        "description": "A relaxed movie or series night at home: popcorn, snacks, sofa, Netflix, dimming the lights, cozy low-stakes entertainment / Noche de película o serie en casa: palomitas, botanas, sillón, Netflix, apagar las luces, plan tranquilo y cómodo.",
+        "valence": 0.4,
+        "arousal": -0.35,
+        "related_emotions": [
+          "calma",
+          "placer",
+          "contento"
+        ]
+      },
+      {
+        "id": "studying",
+        "label": "Estudiando",
+        "description": "Studying or reviewing material for an exam: books, notes, highlighting, flashcards, sometimes stressed about a deadline / Estudiando o repasando para un examen: libros, apuntes, subrayar, fichas, a veces estresado por una fecha de entrega.",
+        "valence": 0.0,
+        "arousal": 0.05,
+        "related_emotions": [
+          "concentracion",
+          "estres",
+          "interes"
+        ]
+      },
+      {
+        "id": "sleeping",
+        "label": "Durmiendo",
+        "description": "Winding down to fall asleep: lying in bed, dimming the lights, insomnia, trying to sleep, minimal stimulation / Preparándose para dormir: acostado en la cama, luces bajas, insomnio, tratando de dormir, mínima estimulación.",
+        "valence": 0.2,
+        "arousal": -0.7,
+        "related_emotions": [
+          "calma",
+          "tranquilidad",
+          "sosiego"
+        ]
+      },
+      {
+        "id": "rainy_day_home",
+        "label": "Día de lluvia en casa",
+        "description": "A quiet rainy day staying indoors: watching the rain through the window, a blanket, tea, unhurried and introspective / Un día de lluvia en casa: ver llover por la ventana, una cobija, un café o un té, tranquilo y pensativo.",
+        "valence": 0.05,
+        "arousal": -0.4,
+        "related_emotions": [
+          "nostalgia",
+          "serenidad",
+          "melancolia"
+        ]
+      },
+      {
+        "id": "breakup_recovery",
+        "label": "Superando una ruptura",
+        "description": "Processing a breakup or heartbreak: an ex, missing someone, crying, healing slowly, moving on from a relationship / Superando una ruptura o desamor: un ex, extrañar a alguien, llorar, sanar poco a poco, dejar atrás una relación.",
+        "valence": -0.45,
+        "arousal": -0.1,
+        "related_emotions": [
+          "tristeza",
+          "desamor",
+          "melancolia"
+        ]
+      },
+      {
+        "id": "morning_routine",
+        "label": "Rutina matutina",
+        "description": "Starting the day: waking up, coffee, showering, getting dressed, getting ready to leave the house / Empezar el día: despertarse, tomar café, bañarse, vestirse, prepararse para salir de casa.",
+        "valence": 0.35,
+        "arousal": 0.2,
+        "related_emotions": [
+          "motivacion",
+          "energico",
+          "calma"
+        ]
+      },
+      {
+        "id": "working_focus",
+        "label": "Trabajando concentrado",
+        "description": "Deep-focus work or study session at a desk: emails, coding, writing, needing concentration and no distractions / Trabajar concentrado en el escritorio: correos, programar, escribir, necesitar enfoque y cero distracciones.",
+        "valence": 0.15,
+        "arousal": 0.1,
+        "related_emotions": [
+          "concentracion",
+          "motivacion",
+          "interes"
+        ]
+      }
+    ]
+  }
+}
