@@ -12,6 +12,14 @@ function formatDuration(seconds: number): string {
   return `${minutes}:${String(remainingSeconds).padStart(2, "0")}`;
 }
 
+function normalizeText(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
 interface PlaylistScreenProps {
   result: PlaylistRecommendResponse;
   moodLabel: string;
@@ -53,6 +61,8 @@ export function PlaylistScreen({
   );
   const {
     currentTrackId,
+    currentTrackName,
+    currentTrackArtists,
     isPaused,
     position,
     duration,
@@ -83,20 +93,32 @@ export function PlaylistScreen({
   const trackIds = useMemo(() => stages.flatMap((stage) => stage.tracks.map((track) => track.id)), [stages]);
 
   const playingTrack = useMemo(() => {
-    if (!currentTrackId) {
-      return null;
-    }
-    for (const stage of stages) {
-      const found = stage.tracks.find((track) => track.id === currentTrackId);
-      if (found) {
-        return found;
+    const allTracks = stages.flatMap((stage) => stage.tracks);
+    if (currentTrackId) {
+      const byId = allTracks.find((track) => track.id === currentTrackId);
+      if (byId) {
+        return byId;
       }
     }
-    return null;
-  }, [currentTrackId, stages]);
+    // Spotify may play a relinked version of the requested track (another album,
+    // region or remaster) with a different id; match it by name and artist instead.
+    if (!currentTrackName) {
+      return null;
+    }
+    const name = normalizeText(currentTrackName);
+    const artists = currentTrackArtists.map(normalizeText);
+    return (
+      allTracks.find(
+        (track) =>
+          normalizeText(track.name) === name &&
+          (artists.length === 0 || artists.some((artist) => normalizeText(track.artist).includes(artist))),
+      ) ?? null
+    );
+  }, [currentTrackId, currentTrackName, currentTrackArtists, stages]);
+  const playingTrackId = playingTrack?.id ?? null;
 
   const handleRowPlay = (trackId: string) => {
-    if (currentTrackId === trackId) {
+    if (playingTrackId === trackId) {
       togglePlay();
       return;
     }
@@ -229,7 +251,7 @@ export function PlaylistScreen({
             {stage.tracks.map((track) => {
               index += 1;
               const matchPercent = Math.round(track.keep_probability * 100);
-              const isCurrentTrack = currentTrackId === track.id;
+              const isCurrentTrack = playingTrackId === track.id;
               const isPlaying = isCurrentTrack && !isPaused;
               return (
                 <div key={track.id} className={`song-row${isCurrentTrack ? " is-playing" : ""}`}>
@@ -289,8 +311,8 @@ export function PlaylistScreen({
         isPaused={isPaused}
         position={position}
         duration={duration}
-        hasPrev={currentTrackId !== null && trackIds.indexOf(currentTrackId) > 0}
-        hasNext={currentTrackId !== null && trackIds.indexOf(currentTrackId) < trackIds.length - 1}
+        hasPrev={playingTrackId !== null && trackIds.indexOf(playingTrackId) > 0}
+        hasNext={playingTrackId !== null && trackIds.indexOf(playingTrackId) < trackIds.length - 1}
         errorMessage={errorMessage}
         errorKind={errorKind}
         onTogglePlay={togglePlay}

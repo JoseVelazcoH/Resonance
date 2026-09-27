@@ -28,6 +28,20 @@ const POSITION_TICK_MS = 500;
 
 interface SpotifyPlayerTrack {
   id: string | null;
+  name?: string;
+  artists?: { name: string; uri?: string }[];
+  // Not in the documented WebPlaybackTrack fields; used only opportunistically when
+  // present. The playlist screen also falls back to matching by name and artist.
+  linked_from?: { id: string | null; uri: string | null } | null;
+}
+
+// Report the id the app requested, not the relinked one, so the playlist can
+// find the playing row (otherwise the player bar and row highlight never show).
+function requestedTrackId(track: SpotifyPlayerTrack | undefined): string | null {
+  if (!track) {
+    return null;
+  }
+  return track.linked_from?.id ?? track.id ?? null;
 }
 
 interface SpotifyPlaybackState {
@@ -107,6 +121,8 @@ export type PlaybackErrorKind = "initialization" | "authentication" | "account" 
 export interface UsePlaybackSdkResult {
   isReady: boolean;
   currentTrackId: string | null;
+  currentTrackName: string | null;
+  currentTrackArtists: string[];
   position: number;
   duration: number;
   isPaused: boolean;
@@ -132,6 +148,8 @@ export function usePlaybackSdk(): UsePlaybackSdkResult {
 
   const [isReady, setIsReady] = useState(false);
   const [currentTrackId, setCurrentTrackId] = useState<string | null>(null);
+  const [currentTrackName, setCurrentTrackName] = useState<string | null>(null);
+  const [currentTrackArtists, setCurrentTrackArtists] = useState<string[]>([]);
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isPaused, setIsPaused] = useState(true);
@@ -174,7 +192,10 @@ export function usePlaybackSdk(): UsePlaybackSdkResult {
           setIsPaused(state.paused);
           setPosition(state.position);
           setDuration(state.duration);
-          setCurrentTrackId(state.track_window.current_track?.id ?? null);
+          const track = state.track_window.current_track;
+          setCurrentTrackId(requestedTrackId(track));
+          setCurrentTrackName(track?.name ?? null);
+          setCurrentTrackArtists(track?.artists?.map((artist) => artist.name) ?? []);
         });
         player.addListener("initialization_error", (payload: SpotifyPlayerErrorPayload) => {
           setErrorKind("initialization");
@@ -281,6 +302,8 @@ export function usePlaybackSdk(): UsePlaybackSdkResult {
   return {
     isReady,
     currentTrackId,
+    currentTrackName,
+    currentTrackArtists,
     position,
     duration,
     isPaused,

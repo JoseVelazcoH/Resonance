@@ -38,11 +38,30 @@ export function PlayerBar({
   onPrev,
   onNext,
 }: PlayerBarProps) {
-  if (!track) {
-    return null;
-  }
-
   const needsReconnect = errorKind === "authentication" || errorKind === "account";
+
+  if (!track) {
+    // No recognized track yet: still surface playback errors (e.g. a track that is
+    // unavailable in the user's region) instead of failing silently.
+    if (!errorMessage) {
+      return null;
+    }
+    return (
+      <div className="player-bar" role="region" aria-label="Player">
+        <p className="player-bar-error">
+          {errorMessage}
+          {needsReconnect && (
+            <>
+              {" "}
+              <a className="player-bar-reconnect-link" href={loginUrl()}>
+                Reconnect Spotify
+              </a>
+            </>
+          )}
+        </p>
+      </div>
+    );
+  }
 
   const handleSeek = (event: React.MouseEvent<HTMLDivElement>) => {
     if (duration <= 0) {
