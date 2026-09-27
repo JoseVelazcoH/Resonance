@@ -1,0 +1,1956 @@
+{
+  "_meta": {
+    "method": "Coordinates follow Russell's circumplex model of affect: valence (negative..positive, x-axis) and arousal (calm..activated, y-axis), both in [-1, 1]. Each family/cluster is placed at a hand-picked centroid reflecting its circumplex quadrant (e.g. anger = negative valence + high arousal, calm = positive valence + low arousal, sadness = negative valence + low arousal). Individual emotions take their family centroid plus a small deterministic offset (seeded by the emotion's own label via sha256, +/- 0.12 per axis) so siblings are not identical points. These values are heuristic approximations for calibrating Laya's choice questions, not empirically measured affect ratings.",
+    "tree_shape": "root -> polarity -> cluster -> family -> emotion",
+    "max_children_per_node": 10,
+    "notes": [
+      "Justicia: A value/principle (fairness), not a felt emotion; placed near virtue-related positive states because it is commonly invoked as a moral feeling.",
+      "Integridad: A character trait/value, not a discrete emotion; placed with kindness/virtue states as a moral-self trait.",
+      "Hambruna: A situation/condition (famine), not an emotion; placed with social-injury negative states because it names extreme deprivation people react to.",
+      "Typo fixes applied to the source list: Hastio->Hastio con tilde (Hastío), Apreciacion->Apreciación, Autonomia->Autonomía, Codescendencia->Condescendencia, Fasticio->Fastidio (merged as duplicate).",
+      "Duplicate merges: Valentia appeared under Negative and Variable, kept once under Variable (ambivalent) as courage reads as context-dependent; Compromiso appeared under Positive and Variable, kept once under Positive; Lastima/Lástima merged to Lástima under Negative; Fastidio/Fasticio merged to Fastidio under Negative."
+    ]
+  },
+  "polarities": {
+    "positive": {
+      "id": "positive",
+      "centroid": {
+        "valence": 0.65,
+        "arousal": 0.229
+      },
+      "clusters": {
+        "core_positive": {
+          "id": "core_positive",
+          "description": "All positive-polarity emotion families, from high-energy joy and being in love to calm contentment and confidence / Todas las familias de polaridad positiva, desde alegría de alta energía y estar enamorado/a hasta calma satisfecha y confianza en uno mismo. || All positive-polarity emotion families, spanning high-energy joy to calm contentment.",
+          "centroid": {
+            "valence": 0.65,
+            "arousal": 0.229
+          },
+          "families": {
+            "joy_elation": {
+              "id": "joy_elation",
+              "description": "High-energy joy and elation: delight, euphoria, wanting to dance and celebrate / Alegría de alta energía y euforia: júbilo, ganas de bailar y celebrar. || High-energy joy and elation, from delight to euphoric peaks.",
+              "centroid": {
+                "valence": 0.85,
+                "arousal": 0.7
+              },
+              "emotions": [
+                {
+                  "id": "alegria",
+                  "label": "Alegría",
+                  "valence": 0.837,
+                  "arousal": 0.681
+                },
+                {
+                  "id": "gozo",
+                  "label": "Gozo",
+                  "valence": 0.739,
+                  "arousal": 0.751
+                },
+                {
+                  "id": "jubilo",
+                  "label": "Júbilo",
+                  "valence": 0.807,
+                  "arousal": 0.702
+                },
+                {
+                  "id": "felicidad",
+                  "label": "Felicidad",
+                  "valence": 0.945,
+                  "arousal": 0.763
+                },
+                {
+                  "id": "euforia",
+                  "label": "Euforia",
+                  "valence": 0.82,
+                  "arousal": 0.743
+                },
+                {
+                  "id": "extasis",
+                  "label": "Éxtasis",
+                  "valence": 0.918,
+                  "arousal": 0.707
+                },
+                {
+                  "id": "alborozo",
+                  "label": "Alborozo",
+                  "valence": 0.776,
+                  "arousal": 0.637
+                },
+                {
+                  "id": "entusiasmo",
+                  "label": "Entusiasmo",
+                  "valence": 0.744,
+                  "arousal": 0.818
+                },
+                {
+                  "id": "placer",
+                  "label": "Placer",
+                  "valence": 0.743,
+                  "arousal": 0.722
+                },
+                {
+                  "id": "contento",
+                  "label": "Contento",
+                  "valence": 0.775,
+                  "arousal": 0.774
+                }
+              ]
+            },
+            "love_affection": {
+              "id": "love_affection",
+              "description": "Being in love, loving someone, romance, partner, tenderness, affection, closeness with others / Estar enamorado/a, amar a alguien, romance, pareja, cariño, ternura, cercanía con otras personas. || Warm relational bonds: affection, empathy, and closeness with others.",
+              "centroid": {
+                "valence": 0.7,
+                "arousal": 0.3
+              },
+              "emotions": [
+                {
+                  "id": "amor",
+                  "label": "Amor",
+                  "valence": 0.62,
+                  "arousal": 0.233
+                },
+                {
+                  "id": "afecto",
+                  "label": "Afecto",
+                  "valence": 0.613,
+                  "arousal": 0.387
+                },
+                {
+                  "id": "carino",
+                  "label": "Cariño",
+                  "valence": 0.588,
+                  "arousal": 0.329
+                },
+                {
+                  "id": "apego",
+                  "label": "Apego",
+                  "valence": 0.663,
+                  "arousal": 0.391
+                },
+                {
+                  "id": "compasion",
+                  "label": "Compasión",
+                  "valence": 0.643,
+                  "arousal": 0.212
+                },
+                {
+                  "id": "empatia",
+                  "label": "Empatía",
+                  "valence": 0.73,
+                  "arousal": 0.242
+                },
+                {
+                  "id": "simpatia",
+                  "label": "Simpatía",
+                  "valence": 0.765,
+                  "arousal": 0.348
+                },
+                {
+                  "id": "estima",
+                  "label": "Estima",
+                  "valence": 0.682,
+                  "arousal": 0.248
+                },
+                {
+                  "id": "comprension",
+                  "label": "Comprensión",
+                  "valence": 0.618,
+                  "arousal": 0.207
+                },
+                {
+                  "id": "solidaridad",
+                  "label": "Solidaridad",
+                  "valence": 0.687,
+                  "arousal": 0.265
+                }
+              ]
+            },
+            "kindness_virtue": {
+              "id": "kindness_virtue",
+              "description": "Prosocial virtues: generosity, honesty, moral integrity, doing the right thing / Virtudes prosociales: generosidad, honestidad, integridad moral, hacer lo correcto. || Prosocial virtues: generosity, honesty, and moral integrity.",
+              "centroid": {
+                "valence": 0.6,
+                "arousal": 0.1
+              },
+              "emotions": [
+                {
+                  "id": "generosidad",
+                  "label": "Generosidad",
+                  "valence": 0.482,
+                  "arousal": 0.11
+                },
+                {
+                  "id": "bondad",
+                  "label": "Bondad",
+                  "valence": 0.616,
+                  "arousal": 0.206
+                },
+                {
+                  "id": "benevolencia",
+                  "label": "Benevolencia",
+                  "valence": 0.578,
+                  "arousal": 0.102
+                },
+                {
+                  "id": "amabilidad",
+                  "label": "Amabilidad",
+                  "valence": 0.509,
+                  "arousal": 0.19
+                },
+                {
+                  "id": "honestidad",
+                  "label": "Honestidad",
+                  "valence": 0.532,
+                  "arousal": 0.206
+                },
+                {
+                  "id": "honorabilidad",
+                  "label": "Honorabilidad",
+                  "valence": 0.567,
+                  "arousal": 0.03
+                },
+                {
+                  "id": "integridad",
+                  "label": "Integridad",
+                  "valence": 0.501,
+                  "arousal": 0.201
+                },
+                {
+                  "id": "dignidad",
+                  "label": "Dignidad",
+                  "valence": 0.67,
+                  "arousal": 0.111
+                },
+                {
+                  "id": "respeto",
+                  "label": "Respeto",
+                  "valence": 0.553,
+                  "arousal": 0.088
+                },
+                {
+                  "id": "justicia",
+                  "label": "Justicia",
+                  "valence": 0.518,
+                  "arousal": 0.129
+                }
+              ]
+            },
+            "confidence_achievement": {
+              "id": "confidence_achievement",
+              "description": "Feeling capable, proud, motivated, ready to power through a goal or workout / Sentirse capaz, orgulloso/a, motivado/a, listo/a para lograr una meta o entrenar. || Self-assured, energized states tied to accomplishment and personal strength.",
+              "centroid": {
+                "valence": 0.65,
+                "arousal": 0.5
+              },
+              "emotions": [
+                {
+                  "id": "logro",
+                  "label": "Logro",
+                  "valence": 0.572,
+                  "arousal": 0.568
+                },
+                {
+                  "id": "orgullo",
+                  "label": "Orgullo",
+                  "valence": 0.753,
+                  "arousal": 0.431
+                },
+                {
+                  "id": "competencia",
+                  "label": "Competencia",
+                  "valence": 0.755,
+                  "arousal": 0.574
+                },
+                {
+                  "id": "fortaleza",
+                  "label": "Fortaleza",
+                  "valence": 0.603,
+                  "arousal": 0.413
+                },
+                {
+                  "id": "firmeza",
+                  "label": "Firmeza",
+                  "valence": 0.531,
+                  "arousal": 0.465
+                },
+                {
+                  "id": "confianza",
+                  "label": "Confianza",
+                  "valence": 0.709,
+                  "arousal": 0.535
+                },
+                {
+                  "id": "motivacion",
+                  "label": "Motivación",
+                  "valence": 0.564,
+                  "arousal": 0.514
+                },
+                {
+                  "id": "autonomia",
+                  "label": "Autonomía",
+                  "valence": 0.663,
+                  "arousal": 0.616
+                },
+                {
+                  "id": "suficiencia",
+                  "label": "Suficiencia",
+                  "valence": 0.61,
+                  "arousal": 0.525
+                },
+                {
+                  "id": "omnipotencia",
+                  "label": "Omnipotencia",
+                  "valence": 0.666,
+                  "arousal": 0.509
+                }
+              ]
+            },
+            "calm_contentment": {
+              "id": "calm_contentment",
+              "description": "Peaceful, settled, relaxed and quietly satisfied, wanting to unwind or rest / Paz, tranquilidad, relajación, satisfacción serena, ganas de relajarse o descansar. || Settled, low-arousal positive states: peace, balance, and quiet satisfaction.",
+              "centroid": {
+                "valence": 0.6,
+                "arousal": -0.4
+              },
+              "emotions": [
+                {
+                  "id": "paz",
+                  "label": "Paz",
+                  "valence": 0.605,
+                  "arousal": -0.292
+                },
+                {
+                  "id": "armonia",
+                  "label": "Armonía",
+                  "valence": 0.658,
+                  "arousal": -0.496
+                },
+                {
+                  "id": "templanza",
+                  "label": "Templanza",
+                  "valence": 0.637,
+                  "arousal": -0.487
+                },
+                {
+                  "id": "humildad",
+                  "label": "Humildad",
+                  "valence": 0.564,
+                  "arousal": -0.394
+                },
+                {
+                  "id": "tolerancia",
+                  "label": "Tolerancia",
+                  "valence": 0.545,
+                  "arousal": -0.444
+                },
+                {
+                  "id": "aceptacion",
+                  "label": "Aceptación",
+                  "valence": 0.566,
+                  "arousal": -0.497
+                },
+                {
+                  "id": "alivio",
+                  "label": "Alivio",
+                  "valence": 0.581,
+                  "arousal": -0.331
+                },
+                {
+                  "id": "satisfaccion",
+                  "label": "Satisfacción",
+                  "valence": 0.657,
+                  "arousal": -0.463
+                },
+                {
+                  "id": "plenitud",
+                  "label": "Plenitud",
+                  "valence": 0.517,
+                  "arousal": -0.433
+                },
+                {
+                  "id": "concentracion",
+                  "label": "Concentración",
+                  "valence": 0.666,
+                  "arousal": -0.299
+                }
+              ]
+            },
+            "hope_optimism": {
+              "id": "hope_optimism",
+              "description": "Forward-looking hope, optimism, anticipation, looking forward to something good / Esperanza, optimismo, ilusión, expectativa de algo bueno por venir. || Forward-looking positive anticipation and engaged interest.",
+              "centroid": {
+                "valence": 0.6,
+                "arousal": 0.35
+              },
+              "emotions": [
+                {
+                  "id": "esperanza",
+                  "label": "Esperanza",
+                  "valence": 0.541,
+                  "arousal": 0.354
+                },
+                {
+                  "id": "optimismo",
+                  "label": "Optimismo",
+                  "valence": 0.613,
+                  "arousal": 0.318
+                },
+                {
+                  "id": "ilusion",
+                  "label": "Ilusión",
+                  "valence": 0.546,
+                  "arousal": 0.346
+                },
+                {
+                  "id": "interes",
+                  "label": "Interés",
+                  "valence": 0.498,
+                  "arousal": 0.244
+                },
+                {
+                  "id": "pasion",
+                  "label": "Pasión",
+                  "valence": 0.65,
+                  "arousal": 0.385
+                },
+                {
+                  "id": "fervor",
+                  "label": "Fervor",
+                  "valence": 0.582,
+                  "arousal": 0.268
+                },
+                {
+                  "id": "encanto",
+                  "label": "Encanto",
+                  "valence": 0.663,
+                  "arousal": 0.436
+                },
+                {
+                  "id": "vitalidad",
+                  "label": "Vitalidad",
+                  "valence": 0.558,
+                  "arousal": 0.464
+                },
+                {
+                  "id": "energico",
+                  "label": "Enérgico",
+                  "valence": 0.508,
+                  "arousal": 0.456
+                },
+                {
+                  "id": "complacencia",
+                  "label": "Complacencia",
+                  "valence": 0.504,
+                  "arousal": 0.4
+                }
+              ]
+            },
+            "social_support": {
+              "id": "social_support",
+              "description": "Belonging, gratitude, feeling supported and cared for by others / Pertenencia, gratitud, sentirse acompañado/a y apoyado/a por otros. || Positive states rooted in belonging, gratitude, and mutual support.",
+              "centroid": {
+                "valence": 0.55,
+                "arousal": 0.05
+              },
+              "emotions": [
+                {
+                  "id": "agradecimiento",
+                  "label": "Agradecimiento",
+                  "valence": 0.565,
+                  "arousal": 0.045
+                },
+                {
+                  "id": "acompanamiento",
+                  "label": "Acompañamiento",
+                  "valence": 0.486,
+                  "arousal": 0.071
+                },
+                {
+                  "id": "admiracion",
+                  "label": "Admiración",
+                  "valence": 0.451,
+                  "arousal": -0.018
+                },
+                {
+                  "id": "apreciacion",
+                  "label": "Apreciación",
+                  "valence": 0.647,
+                  "arousal": 0.012
+                },
+                {
+                  "id": "aprobacion",
+                  "label": "Aprobación",
+                  "valence": 0.657,
+                  "arousal": 0.077
+                },
+                {
+                  "id": "seguridad",
+                  "label": "Seguridad",
+                  "valence": 0.489,
+                  "arousal": 0.011
+                },
+                {
+                  "id": "cuidado",
+                  "label": "Cuidado",
+                  "valence": 0.599,
+                  "arousal": 0.051
+                },
+                {
+                  "id": "apoyo",
+                  "label": "Apoyo",
+                  "valence": 0.593,
+                  "arousal": 0.157
+                },
+                {
+                  "id": "libertad",
+                  "label": "Libertad",
+                  "valence": 0.471,
+                  "arousal": -0.047
+                },
+                {
+                  "id": "compromiso",
+                  "label": "Compromiso",
+                  "valence": 0.607,
+                  "arousal": 0.072
+                }
+              ]
+            }
+          }
+        }
+      },
+      "description": "Positive polarity: the listener/lyrics feel good, upbeat, warm or content overall (happy, in love, proud, grateful, relaxed and satisfied) / Polaridad positiva: la persona se siente bien, animada, cálida o conforme en general (feliz, enamorada, orgullosa, agradecida, relajada y satisfecha)."
+    },
+    "negative": {
+      "id": "negative",
+      "centroid": {
+        "valence": -0.574,
+        "arousal": 0.119
+      },
+      "clusters": {
+        "acute_distress": {
+          "id": "acute_distress",
+          "description": "Acute negative states felt strongly right now: grief, fear, anger, disgust, shame, stress / Estados negativos agudos que se sienten con fuerza en el momento: duelo, miedo, ira, asco, vergüenza, estrés. || Acute negative states with strong felt intensity: grief, fear, anger, disgust, shame, and stress.",
+          "centroid": {
+            "valence": -0.614,
+            "arousal": 0.221
+          },
+          "families": {
+            "sadness_grief": {
+              "id": "sadness_grief",
+              "description": "Deep sorrow, mourning, grief, heartbreak, crying over a loss / Tristeza profunda, duelo, luto, corazón roto, llorar por una pérdida. || Deep sorrow, mourning, and grief-related low-energy pain.",
+              "centroid": {
+                "valence": -0.7,
+                "arousal": -0.5
+              },
+              "emotions": [
+                {
+                  "id": "tristeza",
+                  "label": "Tristeza",
+                  "valence": -0.794,
+                  "arousal": -0.543
+                },
+                {
+                  "id": "melancolia",
+                  "label": "Melancolía",
+                  "valence": -0.652,
+                  "arousal": -0.602
+                },
+                {
+                  "id": "pena",
+                  "label": "Pena",
+                  "valence": -0.635,
+                  "arousal": -0.545
+                },
+                {
+                  "id": "pesadumbre",
+                  "label": "Pesadumbre",
+                  "valence": -0.642,
+                  "arousal": -0.444
+                },
+                {
+                  "id": "desconsuelo",
+                  "label": "Desconsuelo",
+                  "valence": -0.728,
+                  "arousal": -0.488
+                },
+                {
+                  "id": "desdicha",
+                  "label": "Desdicha",
+                  "valence": -0.597,
+                  "arousal": -0.518
+                },
+                {
+                  "id": "desolacion",
+                  "label": "Desolación",
+                  "valence": -0.639,
+                  "arousal": -0.515
+                },
+                {
+                  "id": "afliccion",
+                  "label": "Aflicción",
+                  "valence": -0.785,
+                  "arousal": -0.505
+                },
+                {
+                  "id": "duelo",
+                  "label": "Duelo",
+                  "valence": -0.593,
+                  "arousal": -0.457
+                },
+                {
+                  "id": "abatimiento",
+                  "label": "Abatimiento",
+                  "valence": -0.687,
+                  "arousal": -0.495
+                }
+              ]
+            },
+            "despair_hopelessness": {
+              "id": "despair_hopelessness",
+              "description": "Hopelessness, giving up, feeling like nothing will get better / Desesperanza, rendirse, sentir que nada va a mejorar. || Hopelessness and loss of motivation, from mild discouragement to despair.",
+              "centroid": {
+                "valence": -0.65,
+                "arousal": -0.3
+              },
+              "emotions": [
+                {
+                  "id": "desesperacion",
+                  "label": "Desesperación",
+                  "valence": -0.659,
+                  "arousal": -0.418
+                },
+                {
+                  "id": "desanimo",
+                  "label": "Desánimo",
+                  "valence": -0.586,
+                  "arousal": -0.251
+                },
+                {
+                  "id": "desaliento",
+                  "label": "Desaliento",
+                  "valence": -0.683,
+                  "arousal": -0.361
+                },
+                {
+                  "id": "desgano",
+                  "label": "Desgano",
+                  "valence": -0.609,
+                  "arousal": -0.211
+                },
+                {
+                  "id": "depresion",
+                  "label": "Depresión",
+                  "valence": -0.64,
+                  "arousal": -0.353
+                },
+                {
+                  "id": "infelicidad",
+                  "label": "Infelicidad",
+                  "valence": -0.755,
+                  "arousal": -0.34
+                },
+                {
+                  "id": "desencanto",
+                  "label": "Desencanto",
+                  "valence": -0.762,
+                  "arousal": -0.212
+                },
+                {
+                  "id": "desilusion",
+                  "label": "Desilusión",
+                  "valence": -0.551,
+                  "arousal": -0.278
+                },
+                {
+                  "id": "decepcion",
+                  "label": "Decepción",
+                  "valence": -0.745,
+                  "arousal": -0.21
+                },
+                {
+                  "id": "pesimismo",
+                  "label": "Pesimismo",
+                  "valence": -0.678,
+                  "arousal": -0.207
+                }
+              ]
+            },
+            "fear_anxiety": {
+              "id": "fear_anxiety",
+              "description": "Fear, dread, anxiety, panic, feeling threatened or on edge / Miedo, temor, ansiedad, pánico, sentirse amenazado/a o alterado/a. || Threat-driven high-arousal states: fear, dread, and anxious alarm.",
+              "centroid": {
+                "valence": -0.6,
+                "arousal": 0.65
+              },
+              "emotions": [
+                {
+                  "id": "miedo",
+                  "label": "Miedo",
+                  "valence": -0.528,
+                  "arousal": 0.657
+                },
+                {
+                  "id": "temor",
+                  "label": "Temor",
+                  "valence": -0.617,
+                  "arousal": 0.605
+                },
+                {
+                  "id": "terror",
+                  "label": "Terror",
+                  "valence": -0.597,
+                  "arousal": 0.711
+                },
+                {
+                  "id": "pavor",
+                  "label": "Pavor",
+                  "valence": -0.689,
+                  "arousal": 0.587
+                },
+                {
+                  "id": "espanto",
+                  "label": "Espanto",
+                  "valence": -0.504,
+                  "arousal": 0.645
+                },
+                {
+                  "id": "fobia",
+                  "label": "Fobia",
+                  "valence": -0.65,
+                  "arousal": 0.703
+                },
+                {
+                  "id": "ansiedad",
+                  "label": "Ansiedad",
+                  "valence": -0.699,
+                  "arousal": 0.762
+                },
+                {
+                  "id": "angustia",
+                  "label": "Angustia",
+                  "valence": -0.607,
+                  "arousal": 0.739
+                },
+                {
+                  "id": "asustado",
+                  "label": "Asustado",
+                  "valence": -0.547,
+                  "arousal": 0.709
+                },
+                {
+                  "id": "paralisis",
+                  "label": "Parálisis",
+                  "valence": -0.59,
+                  "arousal": 0.567
+                }
+              ]
+            },
+            "anger_hostility": {
+              "id": "anger_hostility",
+              "description": "Hot anger, rage, fury, wanting to fight back, feeling furious at someone / Enojo intenso, ira, furia, ganas de pelear, estar furioso/a con alguien. || Hot, high-energy anger and hostile reactivity.",
+              "centroid": {
+                "valence": -0.6,
+                "arousal": 0.75
+              },
+              "emotions": [
+                {
+                  "id": "ira",
+                  "label": "Ira",
+                  "valence": -0.515,
+                  "arousal": 0.844
+                },
+                {
+                  "id": "rabia",
+                  "label": "Rabia",
+                  "valence": -0.605,
+                  "arousal": 0.778
+                },
+                {
+                  "id": "furia",
+                  "label": "Furia",
+                  "valence": -0.554,
+                  "arousal": 0.773
+                },
+                {
+                  "id": "colera",
+                  "label": "Cólera",
+                  "valence": -0.632,
+                  "arousal": 0.722
+                },
+                {
+                  "id": "enojo",
+                  "label": "Enojo",
+                  "valence": -0.525,
+                  "arousal": 0.689
+                },
+                {
+                  "id": "enfado",
+                  "label": "Enfado",
+                  "valence": -0.605,
+                  "arousal": 0.708
+                },
+                {
+                  "id": "irritacion",
+                  "label": "Irritación",
+                  "valence": -0.547,
+                  "arousal": 0.838
+                },
+                {
+                  "id": "indignacion",
+                  "label": "Indignación",
+                  "valence": -0.489,
+                  "arousal": 0.676
+                },
+                {
+                  "id": "exasperacion",
+                  "label": "Exasperación",
+                  "valence": -0.584,
+                  "arousal": 0.78
+                },
+                {
+                  "id": "hostilidad",
+                  "label": "Hostilidad",
+                  "valence": -0.572,
+                  "arousal": 0.796
+                }
+              ]
+            },
+            "disgust_contempt": {
+              "id": "disgust_contempt",
+              "description": "Disgust, revulsion, contempt, moral rejection of someone or something / Asco, repulsión, desprecio, rechazo moral hacia alguien o algo. || Aversion and moral rejection toward others or situations.",
+              "centroid": {
+                "valence": -0.65,
+                "arousal": 0.3
+              },
+              "emotions": [
+                {
+                  "id": "asco",
+                  "label": "Asco",
+                  "valence": -0.754,
+                  "arousal": 0.257
+                },
+                {
+                  "id": "desprecio",
+                  "label": "Desprecio",
+                  "valence": -0.757,
+                  "arousal": 0.353
+                },
+                {
+                  "id": "menosprecio",
+                  "label": "Menosprecio",
+                  "valence": -0.708,
+                  "arousal": 0.359
+                },
+                {
+                  "id": "mezquindad",
+                  "label": "Mezquindad",
+                  "valence": -0.589,
+                  "arousal": 0.301
+                },
+                {
+                  "id": "rencor",
+                  "label": "Rencor",
+                  "valence": -0.729,
+                  "arousal": 0.233
+                },
+                {
+                  "id": "odio",
+                  "label": "Odio",
+                  "valence": -0.584,
+                  "arousal": 0.217
+                },
+                {
+                  "id": "envidia",
+                  "label": "Envidia",
+                  "valence": -0.652,
+                  "arousal": 0.219
+                },
+                {
+                  "id": "celos",
+                  "label": "Celos",
+                  "valence": -0.594,
+                  "arousal": 0.415
+                },
+                {
+                  "id": "resquemor",
+                  "label": "Resquemor",
+                  "valence": -0.655,
+                  "arousal": 0.397
+                },
+                {
+                  "id": "amargura",
+                  "label": "Amargura",
+                  "valence": -0.535,
+                  "arousal": 0.353
+                }
+              ]
+            },
+            "shame_guilt": {
+              "id": "shame_guilt",
+              "description": "Shame, guilt, embarrassment, feeling bad about oneself / Vergüenza, culpa, pena, sentirse mal con uno mismo. || Self-directed negative evaluation: shame, guilt, and diminished self-worth.",
+              "centroid": {
+                "valence": -0.6,
+                "arousal": 0.1
+              },
+              "emotions": [
+                {
+                  "id": "verguenza",
+                  "label": "Vergüenza",
+                  "valence": -0.524,
+                  "arousal": 0.138
+                },
+                {
+                  "id": "humillacion",
+                  "label": "Humillación",
+                  "valence": -0.486,
+                  "arousal": 0.142
+                },
+                {
+                  "id": "culpa",
+                  "label": "Culpa",
+                  "valence": -0.526,
+                  "arousal": -0.014
+                },
+                {
+                  "id": "remordimiento",
+                  "label": "Remordimiento",
+                  "valence": -0.637,
+                  "arousal": 0.094
+                },
+                {
+                  "id": "pudor",
+                  "label": "Pudor",
+                  "valence": -0.617,
+                  "arousal": 0.179
+                },
+                {
+                  "id": "desprestigio",
+                  "label": "Desprestigio",
+                  "valence": -0.586,
+                  "arousal": 0.119
+                },
+                {
+                  "id": "devaluacion",
+                  "label": "Devaluación",
+                  "valence": -0.615,
+                  "arousal": 0.036
+                },
+                {
+                  "id": "inferioridad",
+                  "label": "Inferioridad",
+                  "valence": -0.689,
+                  "arousal": 0.035
+                },
+                {
+                  "id": "censura",
+                  "label": "Censura",
+                  "valence": -0.605,
+                  "arousal": 0.167
+                },
+                {
+                  "id": "agravio",
+                  "label": "Agravio",
+                  "valence": -0.573,
+                  "arousal": 0.019
+                }
+              ]
+            },
+            "frustration_stress": {
+              "id": "frustration_stress",
+              "description": "Frustration, stress, tension from being blocked or overloaded / Frustración, estrés, tensión por sentirse bloqueado/a o sobrecargado/a. || Mid-to-high arousal tension from blocked goals and overload.",
+              "centroid": {
+                "valence": -0.5,
+                "arousal": 0.55
+              },
+              "emotions": [
+                {
+                  "id": "frustracion",
+                  "label": "Frustración",
+                  "valence": -0.486,
+                  "arousal": 0.457
+                },
+                {
+                  "id": "estres",
+                  "label": "Estrés",
+                  "valence": -0.586,
+                  "arousal": 0.562
+                },
+                {
+                  "id": "agobio",
+                  "label": "Agobio",
+                  "valence": -0.478,
+                  "arousal": 0.622
+                },
+                {
+                  "id": "impaciencia",
+                  "label": "Impaciencia",
+                  "valence": -0.568,
+                  "arousal": 0.624
+                },
+                {
+                  "id": "contrariedad",
+                  "label": "Contrariedad",
+                  "valence": -0.464,
+                  "arousal": 0.537
+                },
+                {
+                  "id": "desasosiego",
+                  "label": "Desasosiego",
+                  "valence": -0.574,
+                  "arousal": 0.449
+                },
+                {
+                  "id": "preocupacion",
+                  "label": "Preocupación",
+                  "valence": -0.555,
+                  "arousal": 0.531
+                },
+                {
+                  "id": "molestia",
+                  "label": "Molestia",
+                  "valence": -0.57,
+                  "arousal": 0.572
+                },
+                {
+                  "id": "fastidio",
+                  "label": "Fastidio",
+                  "valence": -0.442,
+                  "arousal": 0.475
+                },
+                {
+                  "id": "aburrimiento",
+                  "label": "Aburrimiento",
+                  "valence": -0.468,
+                  "arousal": 0.484
+                }
+              ]
+            }
+          }
+        },
+        "relational_decline": {
+          "id": "relational_decline",
+          "description": "Negative states about relationships, competence and belonging: betrayal, loneliness, confusion, failure / Estados negativos sobre relaciones, capacidad y pertenencia: traición, soledad, confusión, fracaso. || Negative states tied to relationships, competence, and social standing: helplessness, confusion, betrayal, isolation, failure, and injustice.",
+          "centroid": {
+            "valence": -0.533,
+            "arousal": 0.017
+          },
+          "families": {
+            "helplessness_weakness": {
+              "id": "helplessness_weakness",
+              "description": "Powerlessness, feeling weak, fragile, dependent on others / Impotencia, sentirse débil, frágil, dependiente de otros. || Low-energy powerlessness and fragile dependency on others.",
+              "centroid": {
+                "valence": -0.55,
+                "arousal": -0.35
+              },
+              "emotions": [
+                {
+                  "id": "impotencia",
+                  "label": "Impotencia",
+                  "valence": -0.634,
+                  "arousal": -0.272
+                },
+                {
+                  "id": "desamparo",
+                  "label": "Desamparo",
+                  "valence": -0.569,
+                  "arousal": -0.318
+                },
+                {
+                  "id": "desvalimiento",
+                  "label": "Desvalimiento",
+                  "valence": -0.469,
+                  "arousal": -0.383
+                },
+                {
+                  "id": "fragilidad",
+                  "label": "Fragilidad",
+                  "valence": -0.597,
+                  "arousal": -0.3
+                },
+                {
+                  "id": "desconsideracion",
+                  "label": "Desconsideración",
+                  "valence": -0.502,
+                  "arousal": -0.455
+                },
+                {
+                  "id": "dependencia",
+                  "label": "Dependencia",
+                  "valence": -0.507,
+                  "arousal": -0.29
+                },
+                {
+                  "id": "inseguridad",
+                  "label": "Inseguridad",
+                  "valence": -0.662,
+                  "arousal": -0.341
+                },
+                {
+                  "id": "insuficiencia",
+                  "label": "Insuficiencia",
+                  "valence": -0.463,
+                  "arousal": -0.437
+                },
+                {
+                  "id": "imperturbabilidad",
+                  "label": "Imperturbabilidad",
+                  "valence": -0.457,
+                  "arousal": -0.39
+                }
+              ]
+            },
+            "confusion_disorientation": {
+              "id": "confusion_disorientation",
+              "description": "Confusion, doubt, mental fog, not knowing what to think or do / Confusión, duda, niebla mental, no saber qué pensar o hacer. || Cognitive disorientation, doubt, and mental fog.",
+              "centroid": {
+                "valence": -0.4,
+                "arousal": 0.15
+              },
+              "emotions": [
+                {
+                  "id": "desconcierto",
+                  "label": "Desconcierto",
+                  "valence": -0.425,
+                  "arousal": 0.221
+                },
+                {
+                  "id": "desorientacion",
+                  "label": "Desorientación",
+                  "valence": -0.452,
+                  "arousal": 0.043
+                },
+                {
+                  "id": "obnubilacion",
+                  "label": "Obnubilación",
+                  "valence": -0.364,
+                  "arousal": 0.225
+                },
+                {
+                  "id": "estupor",
+                  "label": "Estupor",
+                  "valence": -0.518,
+                  "arousal": 0.054
+                },
+                {
+                  "id": "incongruencia",
+                  "label": "Incongruencia",
+                  "valence": -0.426,
+                  "arousal": 0.145
+                },
+                {
+                  "id": "incomprension",
+                  "label": "Incomprensión",
+                  "valence": -0.416,
+                  "arousal": 0.094
+                },
+                {
+                  "id": "incompatibilidad",
+                  "label": "Incompatibilidad",
+                  "valence": -0.382,
+                  "arousal": 0.171
+                },
+                {
+                  "id": "vacilacion",
+                  "label": "Vacilación",
+                  "valence": -0.451,
+                  "arousal": 0.248
+                },
+                {
+                  "id": "petrificacion",
+                  "label": "Petrificación",
+                  "valence": -0.436,
+                  "arousal": 0.117
+                },
+                {
+                  "id": "recelo",
+                  "label": "Recelo",
+                  "valence": -0.505,
+                  "arousal": 0.116
+                }
+              ]
+            },
+            "conflict_betrayal": {
+              "id": "conflict_betrayal",
+              "description": "Betrayal, being manipulated, interpersonal conflict and harm, heartbreak from a breakup / Traición, manipulación, conflicto interpersonal, corazón roto por una ruptura amorosa. || Interpersonal harm: betrayal, manipulation, and aggression.",
+              "centroid": {
+                "valence": -0.65,
+                "arousal": 0.6
+              },
+              "emotions": [
+                {
+                  "id": "traicion",
+                  "label": "Traición",
+                  "valence": -0.664,
+                  "arousal": 0.706
+                },
+                {
+                  "id": "manipulacion",
+                  "label": "Manipulación",
+                  "valence": -0.725,
+                  "arousal": 0.703
+                },
+                {
+                  "id": "engano",
+                  "label": "Engaño",
+                  "valence": -0.601,
+                  "arousal": 0.706
+                },
+                {
+                  "id": "abuso",
+                  "label": "Abuso",
+                  "valence": -0.533,
+                  "arousal": 0.652
+                },
+                {
+                  "id": "agresion",
+                  "label": "Agresión",
+                  "valence": -0.657,
+                  "arousal": 0.673
+                },
+                {
+                  "id": "venganza",
+                  "label": "Venganza",
+                  "valence": -0.628,
+                  "arousal": 0.532
+                },
+                {
+                  "id": "prepotencia",
+                  "label": "Prepotencia",
+                  "valence": -0.691,
+                  "arousal": 0.58
+                },
+                {
+                  "id": "enjuiciamiento",
+                  "label": "Enjuiciamiento",
+                  "valence": -0.561,
+                  "arousal": 0.58
+                },
+                {
+                  "id": "injusticia",
+                  "label": "Injusticia",
+                  "valence": -0.731,
+                  "arousal": 0.719
+                },
+                {
+                  "id": "ofendido",
+                  "label": "Ofendido",
+                  "valence": -0.684,
+                  "arousal": 0.643
+                }
+              ]
+            },
+            "loneliness_emptiness": {
+              "id": "loneliness_emptiness",
+              "description": "Loneliness, isolation, feeling alone, empty, withdrawn / Soledad, aislamiento, sentirse solo/a, vacío/a, distante de los demás. || Withdrawal, isolation, and a felt sense of emptiness.",
+              "centroid": {
+                "valence": -0.55,
+                "arousal": -0.45
+              },
+              "emotions": [
+                {
+                  "id": "soledad",
+                  "label": "Soledad",
+                  "valence": -0.633,
+                  "arousal": -0.432
+                },
+                {
+                  "id": "vacio",
+                  "label": "Vacío",
+                  "valence": -0.592,
+                  "arousal": -0.386
+                },
+                {
+                  "id": "abandono",
+                  "label": "Abandono",
+                  "valence": -0.479,
+                  "arousal": -0.553
+                },
+                {
+                  "id": "ausencia",
+                  "label": "Ausencia",
+                  "valence": -0.585,
+                  "arousal": -0.484
+                },
+                {
+                  "id": "desamor",
+                  "label": "Desamor",
+                  "valence": -0.453,
+                  "arousal": -0.402
+                },
+                {
+                  "id": "desmotivacion",
+                  "label": "Desmotivación",
+                  "valence": -0.462,
+                  "arousal": -0.377
+                },
+                {
+                  "id": "pereza",
+                  "label": "Pereza",
+                  "valence": -0.607,
+                  "arousal": -0.461
+                },
+                {
+                  "id": "desidia",
+                  "label": "Desidia",
+                  "valence": -0.454,
+                  "arousal": -0.529
+                },
+                {
+                  "id": "necesidad",
+                  "label": "Necesidad",
+                  "valence": -0.603,
+                  "arousal": -0.367
+                },
+                {
+                  "id": "hastio",
+                  "label": "Hastío",
+                  "valence": -0.47,
+                  "arousal": -0.544
+                }
+              ]
+            },
+            "failure_instability": {
+              "id": "failure_instability",
+              "description": "Failure, setback, instability, physical or emotional hurt / Fracaso, contratiempo, inestabilidad, dolor físico o emocional. || Setback-related pain: failure, instability, and physical or emotional hurt.",
+              "centroid": {
+                "valence": -0.55,
+                "arousal": 0.1
+              },
+              "emotions": [
+                {
+                  "id": "fracaso",
+                  "label": "Fracaso",
+                  "valence": -0.547,
+                  "arousal": 0.033
+                },
+                {
+                  "id": "derrota",
+                  "label": "Derrota",
+                  "valence": -0.441,
+                  "arousal": 0.155
+                },
+                {
+                  "id": "destruccion",
+                  "label": "Destrucción",
+                  "valence": -0.521,
+                  "arousal": 0.192
+                },
+                {
+                  "id": "desventura",
+                  "label": "Desventura",
+                  "valence": -0.434,
+                  "arousal": 0.065
+                },
+                {
+                  "id": "inestabilidad",
+                  "label": "Inestabilidad",
+                  "valence": -0.663,
+                  "arousal": 0.079
+                },
+                {
+                  "id": "terquedad",
+                  "label": "Terquedad",
+                  "valence": -0.631,
+                  "arousal": 0.218
+                },
+                {
+                  "id": "disforia",
+                  "label": "Disforia",
+                  "valence": -0.591,
+                  "arousal": 0.059
+                },
+                {
+                  "id": "disgusto",
+                  "label": "Disgusto",
+                  "valence": -0.579,
+                  "arousal": 0.095
+                },
+                {
+                  "id": "dolor",
+                  "label": "Dolor",
+                  "valence": -0.66,
+                  "arousal": 0.18
+                },
+                {
+                  "id": "lastima",
+                  "label": "Lástima",
+                  "valence": -0.434,
+                  "arousal": 0.19
+                }
+              ]
+            },
+            "social_injury": {
+              "id": "social_injury",
+              "description": "Injury from injustice, incapacity or social distrust, being wronged / Daño por injusticia, incapacidad o desconfianza social, sentirse agraviado/a. || Injury from injustice, incapacity, and social distrust.",
+              "centroid": {
+                "valence": -0.5,
+                "arousal": 0.05
+              },
+              "emotions": [
+                {
+                  "id": "incapacidad",
+                  "label": "Incapacidad",
+                  "valence": -0.508,
+                  "arousal": 0.025
+                },
+                {
+                  "id": "insatisfaccion",
+                  "label": "Insatisfacción",
+                  "valence": -0.535,
+                  "arousal": 0.157
+                },
+                {
+                  "id": "intolerancia",
+                  "label": "Intolerancia",
+                  "valence": -0.48,
+                  "arousal": -0.034
+                },
+                {
+                  "id": "entristecimiento",
+                  "label": "Entristecimiento",
+                  "valence": -0.578,
+                  "arousal": 0.114
+                },
+                {
+                  "id": "desconfianza",
+                  "label": "Desconfianza",
+                  "valence": -0.536,
+                  "arousal": -0.057
+                },
+                {
+                  "id": "hambruna",
+                  "label": "Hambruna",
+                  "valence": -0.55,
+                  "arousal": 0.133
+                },
+                {
+                  "id": "desproteccion",
+                  "label": "Desprotección",
+                  "valence": -0.552,
+                  "arousal": 0.169
+                }
+              ]
+            }
+          }
+        }
+      },
+      "description": "Negative polarity: the listener/lyrics feel bad overall (sad, angry, afraid, ashamed, hopeless, lonely, hurt, betrayed or overwhelmed) / Polaridad negativa: la persona se siente mal en general (triste, enojada, asustada, avergonzada, sin esperanza, sola, herida, traicionada o abrumada)."
+    },
+    "ambivalent": {
+      "id": "ambivalent",
+      "centroid": {
+        "valence": 0.05,
+        "arousal": 0.137
+      },
+      "clusters": {
+        "ambivalent_core": {
+          "id": "ambivalent_core",
+          "description": "Emotions whose valence depends on context or co-occurring appraisal: longing, desire, surprise, calm detachment, pride, submission, rejection, tender-intense love / Emociones cuya valencia depende del contexto: añoranza, deseo, sorpresa, calma distante, orgullo, resignación, rechazo, amor tierno-intenso. || Emotions whose valence depends on context or co-occurring appraisal: they can present as positive, negative, or neutral.",
+          "centroid": {
+            "valence": 0.05,
+            "arousal": 0.137
+          },
+          "families": {
+            "nostalgia_longing": {
+              "id": "nostalgia_longing",
+              "description": "Bittersweet reflection on the past, missing someone or something, wistful longing, missing an ex / Reflexión agridulce sobre el pasado, extrañar a alguien o algo, añoranza, extrañar a un ex. || Bittersweet reflection: longing, regret, and wistful distance.",
+              "centroid": {
+                "valence": -0.1,
+                "arousal": -0.2
+              },
+              "emotions": [
+                {
+                  "id": "nostalgia",
+                  "label": "Nostalgia",
+                  "valence": -0.161,
+                  "arousal": -0.136
+                },
+                {
+                  "id": "anoranza",
+                  "label": "Añoranza",
+                  "valence": -0.193,
+                  "arousal": -0.095
+                },
+                {
+                  "id": "arrepentimiento",
+                  "label": "Arrepentimiento",
+                  "valence": -0.089,
+                  "arousal": -0.115
+                },
+                {
+                  "id": "duda",
+                  "label": "Duda",
+                  "valence": 0.018,
+                  "arousal": -0.171
+                },
+                {
+                  "id": "congoja",
+                  "label": "Congoja",
+                  "valence": -0.143,
+                  "arousal": -0.236
+                },
+                {
+                  "id": "desden",
+                  "label": "Desdén",
+                  "valence": -0.15,
+                  "arousal": -0.184
+                },
+                {
+                  "id": "resentimiento",
+                  "label": "Resentimiento",
+                  "valence": 0.016,
+                  "arousal": -0.129
+                },
+                {
+                  "id": "reserva",
+                  "label": "Reserva",
+                  "valence": -0.029,
+                  "arousal": -0.118
+                },
+                {
+                  "id": "extraneza",
+                  "label": "Extrañeza",
+                  "valence": -0.119,
+                  "arousal": -0.15
+                }
+              ]
+            },
+            "desire_attraction": {
+              "id": "desire_attraction",
+              "description": "Wanting, craving, being attracted to someone or something, curiosity / Deseo, anhelo, atracción hacia alguien o algo, curiosidad. || Pulled-toward states of wanting: desire, attraction, and curiosity.",
+              "centroid": {
+                "valence": 0.2,
+                "arousal": 0.55
+              },
+              "emotions": [
+                {
+                  "id": "lujuria",
+                  "label": "Lujuria",
+                  "valence": 0.112,
+                  "arousal": 0.589
+                },
+                {
+                  "id": "atraccion",
+                  "label": "Atracción",
+                  "valence": 0.219,
+                  "arousal": 0.435
+                },
+                {
+                  "id": "deseo",
+                  "label": "Deseo",
+                  "valence": 0.195,
+                  "arousal": 0.649
+                },
+                {
+                  "id": "tentacion",
+                  "label": "Tentación",
+                  "valence": 0.1,
+                  "arousal": 0.569
+                },
+                {
+                  "id": "excitacion",
+                  "label": "Excitación",
+                  "valence": 0.151,
+                  "arousal": 0.5
+                },
+                {
+                  "id": "impulsivo",
+                  "label": "Impulsivo",
+                  "valence": 0.302,
+                  "arousal": 0.529
+                },
+                {
+                  "id": "curiosidad",
+                  "label": "Curiosidad",
+                  "valence": 0.233,
+                  "arousal": 0.544
+                },
+                {
+                  "id": "cercania",
+                  "label": "Cercanía",
+                  "valence": 0.186,
+                  "arousal": 0.568
+                },
+                {
+                  "id": "correspondencia",
+                  "label": "Correspondencia",
+                  "valence": 0.104,
+                  "arousal": 0.484
+                }
+              ]
+            },
+            "surprise_alarm": {
+              "id": "surprise_alarm",
+              "description": "Sudden surprise or alarm that could tip positive or negative, being startled / Sorpresa o alarma súbita que puede resultar positiva o negativa, sobresalto. || Sudden high-arousal reactions that can tip positive or negative.",
+              "centroid": {
+                "valence": 0.0,
+                "arousal": 0.7
+              },
+              "emotions": [
+                {
+                  "id": "asombro",
+                  "label": "Asombro",
+                  "valence": -0.021,
+                  "arousal": 0.802
+                },
+                {
+                  "id": "alarma",
+                  "label": "Alarma",
+                  "valence": 0.07,
+                  "arousal": 0.688
+                },
+                {
+                  "id": "sorpresa",
+                  "label": "Sorpresa",
+                  "valence": 0.062,
+                  "arousal": 0.598
+                },
+                {
+                  "id": "confusion",
+                  "label": "Confusión",
+                  "valence": -0.018,
+                  "arousal": 0.622
+                },
+                {
+                  "id": "turbacion",
+                  "label": "Turbación",
+                  "valence": 0.015,
+                  "arousal": 0.788
+                },
+                {
+                  "id": "frenesi",
+                  "label": "Frenesí",
+                  "valence": -0.109,
+                  "arousal": 0.65
+                },
+                {
+                  "id": "paranoia",
+                  "label": "Paranoia",
+                  "valence": 0.023,
+                  "arousal": 0.633
+                },
+                {
+                  "id": "intriga",
+                  "label": "Intriga",
+                  "valence": -0.043,
+                  "arousal": 0.646
+                },
+                {
+                  "id": "inquietud",
+                  "label": "Inquietud",
+                  "valence": 0.043,
+                  "arousal": 0.808
+                },
+                {
+                  "id": "alteracion",
+                  "label": "Alteración",
+                  "valence": 0.105,
+                  "arousal": 0.732
+                }
+              ]
+            },
+            "calm_composure": {
+              "id": "calm_composure",
+              "description": "Steady, detached low-arousal composure that reads as neutral rather than warm, unbothered stillness / Calma distante y serena que se percibe neutral, quietud despreocupada. || Steady low-arousal composure that can read as positive or neutral.",
+              "centroid": {
+                "valence": 0.3,
+                "arousal": -0.55
+              },
+              "emotions": [
+                {
+                  "id": "tranquilidad",
+                  "label": "Tranquilidad",
+                  "valence": 0.394,
+                  "arousal": -0.525
+                },
+                {
+                  "id": "serenidad",
+                  "label": "Serenidad",
+                  "valence": 0.35,
+                  "arousal": -0.465
+                },
+                {
+                  "id": "sosiego",
+                  "label": "Sosiego",
+                  "valence": 0.312,
+                  "arousal": -0.433
+                },
+                {
+                  "id": "calma",
+                  "label": "Calma",
+                  "valence": 0.285,
+                  "arousal": -0.589
+                },
+                {
+                  "id": "ecuanimidad",
+                  "label": "Ecuanimidad",
+                  "valence": 0.291,
+                  "arousal": -0.565
+                },
+                {
+                  "id": "consuelo",
+                  "label": "Consuelo",
+                  "valence": 0.409,
+                  "arousal": -0.528
+                },
+                {
+                  "id": "paciencia",
+                  "label": "Paciencia",
+                  "valence": 0.29,
+                  "arousal": -0.667
+                },
+                {
+                  "id": "seriedad",
+                  "label": "Seriedad",
+                  "valence": 0.188,
+                  "arousal": -0.592
+                },
+                {
+                  "id": "trance",
+                  "label": "Trance",
+                  "valence": 0.24,
+                  "arousal": -0.656
+                }
+              ]
+            },
+            "submission_conformity": {
+              "id": "submission_conformity",
+              "description": "Yielding, giving in, low-energy conformity, resignation / Resignación, ceder, conformarse, bajo nivel de energía. || Yielding, low-energy conformity and detachment.",
+              "centroid": {
+                "valence": -0.15,
+                "arousal": -0.4
+              },
+              "emotions": [
+                {
+                  "id": "sometimiento",
+                  "label": "Sometimiento",
+                  "valence": -0.231,
+                  "arousal": -0.337
+                },
+                {
+                  "id": "sumision",
+                  "label": "Sumisión",
+                  "valence": -0.152,
+                  "arousal": -0.519
+                },
+                {
+                  "id": "resignacion",
+                  "label": "Resignación",
+                  "valence": -0.063,
+                  "arousal": -0.363
+                },
+                {
+                  "id": "obligacion",
+                  "label": "Obligación",
+                  "valence": -0.199,
+                  "arousal": -0.441
+                },
+                {
+                  "id": "indiferencia",
+                  "label": "Indiferencia",
+                  "valence": -0.234,
+                  "arousal": -0.488
+                },
+                {
+                  "id": "apatia",
+                  "label": "Apatía",
+                  "valence": -0.213,
+                  "arousal": -0.355
+                },
+                {
+                  "id": "timidez",
+                  "label": "Timidez",
+                  "valence": -0.187,
+                  "arousal": -0.347
+                },
+                {
+                  "id": "pertenencia",
+                  "label": "Pertenencia",
+                  "valence": -0.062,
+                  "arousal": -0.439
+                }
+              ]
+            },
+            "defiance_pride": {
+              "id": "defiance_pride",
+              "description": "Assertive, high-energy self-assertion, defiant pride that can read as strength or arrogance / Autoafirmación enérgica, orgullo desafiante que puede leerse como fortaleza o arrogancia. || Assertive, high-energy self-assertion that can read as strength or arrogance.",
+              "centroid": {
+                "valence": 0.1,
+                "arousal": 0.5
+              },
+              "emotions": [
+                {
+                  "id": "rebeldia",
+                  "label": "Rebeldía",
+                  "valence": 0.055,
+                  "arousal": 0.592
+                },
+                {
+                  "id": "soberbia",
+                  "label": "Soberbia",
+                  "valence": 0.082,
+                  "arousal": 0.484
+                },
+                {
+                  "id": "obstinacion",
+                  "label": "Obstinación",
+                  "valence": 0.199,
+                  "arousal": 0.596
+                },
+                {
+                  "id": "arrojo",
+                  "label": "Arrojo",
+                  "valence": 0.032,
+                  "arousal": 0.569
+                },
+                {
+                  "id": "intrepidez",
+                  "label": "Intrepidez",
+                  "valence": 0.032,
+                  "arousal": 0.416
+                },
+                {
+                  "id": "dominacion",
+                  "label": "Dominación",
+                  "valence": 0.079,
+                  "arousal": 0.411
+                },
+                {
+                  "id": "ostentacion",
+                  "label": "Ostentación",
+                  "valence": 0.02,
+                  "arousal": 0.466
+                },
+                {
+                  "id": "vulnerabilidad",
+                  "label": "Vulnerabilidad",
+                  "valence": 0.211,
+                  "arousal": 0.389
+                },
+                {
+                  "id": "condescendencia",
+                  "label": "Condescendencia",
+                  "valence": 0.158,
+                  "arousal": 0.566
+                }
+              ]
+            },
+            "rejection_repudiation": {
+              "id": "rejection_repudiation",
+              "description": "Pushing away, rejection, distrust, refusing to accept someone or something / Rechazo, desconfianza, negarse a aceptar a alguien o algo. || Pushing away: rejection, distrust, and non-acceptance.",
+              "centroid": {
+                "valence": -0.3,
+                "arousal": 0.35
+              },
+              "emotions": [
+                {
+                  "id": "rechazo",
+                  "label": "Rechazo",
+                  "valence": -0.362,
+                  "arousal": 0.266
+                },
+                {
+                  "id": "repudio",
+                  "label": "Repudio",
+                  "valence": -0.371,
+                  "arousal": 0.283
+                },
+                {
+                  "id": "persecucion",
+                  "label": "Persecución",
+                  "valence": -0.287,
+                  "arousal": 0.419
+                },
+                {
+                  "id": "invasion",
+                  "label": "Invasión",
+                  "valence": -0.372,
+                  "arousal": 0.314
+                },
+                {
+                  "id": "inconformidad",
+                  "label": "Inconformidad",
+                  "valence": -0.326,
+                  "arousal": 0.276
+                },
+                {
+                  "id": "incredulidad",
+                  "label": "Incredulidad",
+                  "valence": -0.229,
+                  "arousal": 0.339
+                }
+              ]
+            },
+            "unity_tenderness": {
+              "id": "unity_tenderness",
+              "description": "Tender connectedness mixing excitement and warmth, intense togetherness / Conexión tierna que mezcla emoción y calidez, unión intensa. || Tender connectedness and mixed excited-warm togetherness.",
+              "centroid": {
+                "valence": 0.35,
+                "arousal": 0.15
+              },
+              "emotions": [
+                {
+                  "id": "unidad",
+                  "label": "Unidad",
+                  "valence": 0.305,
+                  "arousal": 0.156
+                },
+                {
+                  "id": "ternura",
+                  "label": "Ternura",
+                  "valence": 0.428,
+                  "arousal": 0.249
+                },
+                {
+                  "id": "valoracion",
+                  "label": "Valoración",
+                  "valence": 0.288,
+                  "arousal": 0.063
+                },
+                {
+                  "id": "dicha",
+                  "label": "Dicha",
+                  "valence": 0.274,
+                  "arousal": 0.059
+                },
+                {
+                  "id": "regocijo",
+                  "label": "Regocijo",
+                  "valence": 0.346,
+                  "arousal": 0.146
+                },
+                {
+                  "id": "exaltacion",
+                  "label": "Exaltación",
+                  "valence": 0.357,
+                  "arousal": 0.081
+                },
+                {
+                  "id": "inspiracion",
+                  "label": "Inspiración",
+                  "valence": 0.421,
+                  "arousal": 0.147
+                },
+                {
+                  "id": "valentia",
+                  "label": "Valentía",
+                  "valence": 0.259,
+                  "arousal": 0.143
+                },
+                {
+                  "id": "ambivalencia",
+                  "label": "Ambivalencia",
+                  "valence": 0.339,
+                  "arousal": 0.066
+                }
+              ]
+            }
+          }
+        }
+      },
+      "description": "Ambivalent / mixed polarity: the feeling depends on context or blends good and bad at once (bittersweet nostalgia, wanting/desire, surprise, calm detachment, defiant pride, yielding, rejection, tender-but-intense love) -- not clearly all-good or all-bad / Polaridad ambivalente o mixta: el sentimiento depende del contexto o mezcla algo bueno y malo a la vez (nostalgia agridulce, deseo, sorpresa, calma distante, orgullo desafiante, resignación, rechazo, amor tierno pero intenso) -- no es claramente todo bueno ni todo malo."
+    }
+  }
+}
