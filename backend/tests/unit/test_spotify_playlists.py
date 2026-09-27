@@ -220,6 +220,52 @@ def test_httpx_client_can_be_constructed() -> None:
     HttpxSpotifyPlaylistsHttpClient()
 
 
+def test_list_playlists_excludes_playlists_with_moodify_description_marker() -> None:
+    http = FakeHttpClient(
+        {
+            PLAYLISTS_URL + "?limit=50": {
+                "items": [
+                    {
+                        "id": "own",
+                        "name": "Feel Good",
+                        "images": [],
+                        "tracks": {"total": 1},
+                        "snapshot_id": "s",
+                        "description": "Created by Moodify from a mood prompt",
+                    },
+                    {"id": "keep", "name": "Road Trip", "images": [], "tracks": {"total": 1}, "snapshot_id": "s"},
+                ],
+                "next": None,
+            }
+        }
+    )
+    client = SpotifyPlaylistsClient(http_client=http)
+
+    playlists = client.list_playlists("token")
+
+    assert [p.id for p in playlists] == ["keep"]
+
+
+def test_list_playlists_excludes_playlists_with_moodify_name_prefix() -> None:
+    http = FakeHttpClient(
+        {
+            PLAYLISTS_URL + "?limit=50": {
+                "items": [
+                    {"id": "old1", "name": "Moodify - Estoy triste", "images": [], "tracks": {"total": 1}, "snapshot_id": "s"},
+                    {"id": "old2", "name": "Moodify · Contento · Sep 26", "images": [], "tracks": {"total": 1}, "snapshot_id": "s"},
+                    {"id": "keep", "name": "Road Trip", "images": [], "tracks": {"total": 1}, "snapshot_id": "s"},
+                ],
+                "next": None,
+            }
+        }
+    )
+    client = SpotifyPlaylistsClient(http_client=http)
+
+    playlists = client.list_playlists("token")
+
+    assert [p.id for p in playlists] == ["keep"]
+
+
 def test_get_display_name_reads_profile_field() -> None:
     http = FakeHttpClient({CURRENT_USER_URL: {"id": "me", "display_name": "Jose"}})
     client = SpotifyPlaylistsClient(http_client=http)
@@ -248,7 +294,9 @@ def test_create_playlist_uses_me_playlists_endpoint() -> None:
     playlist_id = client.create_playlist("me", "My Mood", "token")
 
     assert playlist_id == "new-pl"
-    assert http.post_calls == [(PLAYLISTS_URL, {"name": "My Mood", "public": False})]
+    assert http.post_calls == [
+        (PLAYLISTS_URL, {"name": "My Mood", "public": False, "description": "Created by Resonance"})
+    ]
 
 
 def test_create_playlist_falls_back_to_user_playlists_endpoint_on_404() -> None:

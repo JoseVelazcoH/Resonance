@@ -14,6 +14,7 @@ from typing import Protocol
 import httpx
 
 from mood_dj.domain.models import PlaylistSummary, PlaylistTrack
+from mood_dj.domain.app_ownership import APP_DESCRIPTION_MARKER, is_app_created
 from mood_dj.ports.spotify_playlists import SpotifyApiError
 
 PLAYLISTS_URL = "https://api.spotify.com/v1/me/playlists"
@@ -86,7 +87,7 @@ class SpotifyPlaylistsClient:
         while url:
             page = self._http_client.get(url, access_token)
             for item in page.get("items", []):
-                if self._is_readable(item, user_id):
+                if self._is_readable(item, user_id) and not self._is_app_own(item):
                     playlists.append(self._map_playlist(item))
             url = page.get("next")
         return playlists
@@ -95,6 +96,10 @@ class SpotifyPlaylistsClient:
         # Spotify answers 403 on the tracks of playlists the user only follows.
         owner_id = (item.get("owner") or {}).get("id")
         return owner_id is None or owner_id == user_id or bool(item.get("collaborative"))
+
+    def _is_app_own(self, item: dict) -> bool:
+        # Never feed the app's own saved playlists back into the library or the UI.
+        return is_app_created(item.get("name", ""), item.get("description"))
 
     def get_playlist_tracks(self, playlist_id: str, access_token: str) -> list[PlaylistTrack]:
         tracks: list[PlaylistTrack] = []
@@ -117,7 +122,7 @@ class SpotifyPlaylistsClient:
         return profile["id"]
 
     def create_playlist(self, user_id: str, name: str, access_token: str) -> str:
-        payload = {"name": name, "public": False}
+        payload = {"name": name, "public": False, "description": APP_DESCRIPTION_MARKER}
         status, body = self._http_client.post(PLAYLISTS_URL, access_token, payload)
         if status == 404:
             status, body = self._http_client.post(user_playlists_url(user_id), access_token, payload)
