@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { usePlaybackSdk } from "./hooks/usePlaybackSdk";
 import "./App.css";
 import {
   ApiError,
@@ -31,6 +32,10 @@ const LYRICS_POLL_INTERVAL_MS = 1000;
 const RECOMMEND_POLL_INTERVAL_MS = 1000;
 
 function App() {
+  // One Spotify Web Playback SDK player for the whole app lifetime. Creating and
+  // destroying players per screen visit left the second player without a device,
+  // so playback failed after going Home and generating another playlist.
+  const playback = usePlaybackSdk();
   const [authChecked, setAuthChecked] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
   const [displayName, setDisplayName] = useState<string | null>(null);
@@ -119,26 +124,24 @@ function App() {
 
   // On first login, call POST /library/prepare once (idempotent: fast when everything is
   // already cached in SQLite) so GET /library/status reflects the real state instead of
-  // an "idle" job that never ran. If it resolves to "done" immediately we skip straight
-  // to Home; otherwise we show the start-download screen so the user's click feels like
-  // the action that "starts" the visible download, matching the Figma flow, even though
-  // the backend job was technically kicked off a moment earlier.
+  // an "idle" job that never ran. The job always starts with a "reading playlists" phase
+  // (a few seconds against the Spotify API) before it knows whether anything actually
+  // needs downloading, so we show a neutral "checking" screen during that phase instead
+  // of jumping straight to Start Download. Once playlists are read, real counts decide:
+  // missing lyrics -> Start Download, lyrics done but profiles pending -> the lyrics/mood
+  // progress screen directly, nothing left -> Home.
   useEffect(() => {
     if (!authChecked || !loggedIn || libraryChecked.current) {
       return;
     }
     libraryChecked.current = true;
+    setScreen("checking");
 
     prepareLibrary()
       .then(() => fetchLibraryStatus())
       .then((status) => {
         setLibraryPrepareStatus(status);
-        if (status.state === "done" && isMoodProfilingDone(status)) {
-          setScreen("home");
-        } else {
-          setScreen("start-download");
-          pollLibraryPrepareStatus();
-        }
+        advanceFromCheckingStatus(status);
       })
       .catch((err) => {
         setLibraryError(err instanceof Error ? err.message : "Failed to prepare your library");
@@ -146,18 +149,54 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authChecked, loggedIn]);
 
-  const pollLibraryPrepareStatus = () => {
+  // While the job is still only reading playlists (or hasn't reported a real phase yet),
+  // its counts are not meaningful, so keep polling and stay on the "checking" screen.
+  const isStillReadingPlaylists = (status: LibraryStatus): boolean => {
+    return status.state === "idle" || status.phase === "reading playlists";
+  };
+
+  const hasMissingLyrics = (status: LibraryStatus): boolean => {
+    return status.tracks_total - status.cached > 0 || status.pending > 0;
+  };
+
+  const advanceFromCheckingStatus = (status: LibraryStatus) => {
+    if (status.state === "error") {
+      stopLibraryPolling();
+      setLibraryError(status.error ?? "Failed to prepare your library");
+      return;
+    }
+
+    if (isStillReadingPlaylists(status)) {
+      pollCheckingStatus();
+      return;
+    }
+
+    stopLibraryPolling();
+    if (hasMissingLyrics(status)) {
+      setScreen("start-download");
+      return;
+    }
+    if (!isMoodProfilingDone(status)) {
+      setScreen("lyrics-download");
+      pollLyricsStatus();
+      return;
+    }
+    setScreen("home");
+  };
+
+  const pollCheckingStatus = () => {
     stopLibraryPolling();
     libraryPollRef.current = setInterval(async () => {
       try {
         const status = await fetchLibraryStatus();
-        if (status.state === "error") {
+        setLibraryPrepareStatus(status);
+        if (status.state === "error" || !isStillReadingPlaylists(status)) {
           stopLibraryPolling();
-          setLibraryError(status.error ?? "Failed to prepare your library");
+          advanceFromCheckingStatus(status);
         }
       } catch (err) {
         stopLibraryPolling();
-        setLibraryError(err instanceof Error ? err.message : "Failed to check preparation status");
+        setLibraryError(err instanceof Error ? err.message : "Failed to check your library");
       }
     }, LIBRARY_POLL_INTERVAL_MS);
   };
@@ -322,6 +361,15 @@ function App() {
       return <HomeScreen onSubmitPrompt={handleSubmitPrompt} />;
     }
 
+    if (screen === "checking") {
+      return (
+        <div className="checking-library">
+          <div className="checking-spinner" aria-hidden="true" />
+          <p className="checking-label">Checking your library...</p>
+        </div>
+      );
+    }
+
     if (screen === "start-download") {
       return <StartDownloadScreen onStart={handleStartDownload} />;
     }
@@ -359,6 +407,7 @@ function App() {
           saveError={saveError}
           savedPlaylistId={savedPlaylistId}
           savedPlaylistName={savedPlaylistName}
+          playback={playback}
         />
       );
     }

@@ -1,7 +1,7 @@
 import brandIndicator from "../assets/brand-indicator.svg";
 import circleX from "../assets/circle-x.svg";
 
-export type Screen = "home" | "start-download" | "lyrics-download" | "analysis" | "playlist";
+export type Screen = "checking" | "home" | "start-download" | "lyrics-download" | "analysis" | "playlist";
 
 interface HeaderProps {
   activeScreen: Screen;
@@ -25,7 +25,9 @@ export function Header({
   onLogout,
 }: HeaderProps) {
   const navTarget =
-    activeScreen === "start-download" || activeScreen === "lyrics-download" ? "home" : activeScreen;
+    activeScreen === "checking" || activeScreen === "start-download" || activeScreen === "lyrics-download"
+      ? "home"
+      : activeScreen;
 
   return (
     <div className="top-header">

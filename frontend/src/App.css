@@ -279,6 +279,33 @@ a {
   border-color: var(--border-strong);
 }
 
+/* ---------- Checking library screen ---------- */
+
+.checking-library {
+  flex: 1 0 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px;
+}
+
+.checking-spinner {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.15);
+  border-top-color: var(--green);
+  animation: lyrics-spin 1s linear infinite;
+}
+
+.checking-label {
+  margin: 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+
 /* ---------- Start download screen ---------- */
 
 .start-download-content {
@@ -297,7 +324,8 @@ a {
   align-items: center;
   gap: 16px;
   text-align: center;
-  max-width: 400px;
+  max-width: 640px;
+  width: 100%;
 }
 
 .start-download-text h1 {
@@ -306,6 +334,14 @@ a {
   font-weight: 700;
   letter-spacing: -1.5px;
   color: var(--white);
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .start-download-text h1 {
+    white-space: normal;
+    font-size: 36px;
+  }
 }
 
 .start-download-text p {
@@ -324,7 +360,7 @@ a {
   padding: 16px 32px;
   font-size: 15px;
   font-weight: 600;
-  color: var(--bg);
+  color: #fcfcfc;
   box-shadow: 0 8px 12px rgba(29, 185, 84, 0.2);
 }
 
@@ -1080,24 +1116,33 @@ a {
 .playlist-name-label {
   font-size: 12px;
   font-weight: 500;
-  color: var(--subtle);
+  color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.02em;
 }
 
 .playlist-name-input {
-  background: var(--surface);
-  border: 1px solid var(--border);
+  /* Lighter fill and a visible border so it clearly reads as an editable field. */
+  background: #1a1a1a;
+  border: 1px solid #3a3a3a;
   border-radius: 100px;
   padding: 12px 16px;
   font-size: 14px;
   font-family: inherit;
   color: var(--white);
+  cursor: text;
   outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+.playlist-name-input:hover:not(:disabled) {
+  border-color: #5a5a5a;
 }
 
 .playlist-name-input:focus {
-  border-color: var(--border-strong);
+  background: #202020;
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px rgba(29, 185, 84, 0.25);
 }
 
 .playlist-name-input:disabled {
