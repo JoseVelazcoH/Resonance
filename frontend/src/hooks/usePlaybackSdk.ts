@@ -52,6 +52,7 @@ interface SpotifyPlayer {
   removeListener: (event: string) => void;
   getCurrentState: () => Promise<SpotifyPlaybackState | null>;
   togglePlay: () => Promise<void>;
+  pause: () => Promise<void>;
   seek: (positionMs: number) => Promise<void>;
   nextTrack: () => Promise<void>;
   previousTrack: () => Promise<void>;
@@ -113,6 +114,7 @@ export interface UsePlaybackSdkResult {
   errorKind: PlaybackErrorKind;
   playTracks: (trackIds: string[], startIndex: number) => Promise<void>;
   togglePlay: () => void;
+  pause: () => void;
   seek: (ms: number) => void;
   next: () => void;
   previous: () => void;
@@ -259,6 +261,10 @@ export function usePlaybackSdk(): UsePlaybackSdkResult {
     playerRef.current?.togglePlay();
   }, [activateElementOnce]);
 
+  const pause = useCallback(() => {
+    playerRef.current?.pause();
+  }, []);
+
   const seek = useCallback((ms: number) => {
     playerRef.current?.seek(ms);
     setPosition(ms);
@@ -282,6 +288,7 @@ export function usePlaybackSdk(): UsePlaybackSdkResult {
     errorKind,
     playTracks,
     togglePlay,
+    pause,
     seek,
     next,
     previous,

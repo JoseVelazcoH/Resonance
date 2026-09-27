@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import musicIcon from "../assets/music.svg";
 import { PlayerBar } from "../components/PlayerBar";
-import { usePlaybackSdk } from "../hooks/usePlaybackSdk";
+import type { UsePlaybackSdkResult } from "../hooks/usePlaybackSdk";
 import { strategyTitle } from "../lib/strategyTitles";
 import type { PlaylistRecommendResponse, PlaylistStage, PlaylistTrack } from "../types/api";
 
@@ -21,6 +21,7 @@ interface PlaylistScreenProps {
   saveError: string | null;
   savedPlaylistId: string | null;
   savedPlaylistName: string | null;
+  playback: UsePlaybackSdkResult;
 }
 
 interface RemovedTrack {
@@ -31,7 +32,7 @@ interface RemovedTrack {
 
 function buildSuggestedName(strategyTitle: string, moodLabel: string): string {
   const label = moodLabel.trim() || strategyTitle;
-  const shortDate = new Date().toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  const shortDate = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" });
   return `Resonance · ${label} · ${shortDate}`;
 }
 
@@ -44,6 +45,7 @@ export function PlaylistScreen({
   saveError,
   savedPlaylistId,
   savedPlaylistName,
+  playback,
 }: PlaylistScreenProps) {
   const title = strategyTitle(result.strategy);
   const [stages, setStages] = useState<PlaylistStage[]>(() =>
@@ -58,11 +60,20 @@ export function PlaylistScreen({
     errorKind,
     playTracks,
     togglePlay,
+    pause,
     seek,
     next: playNext,
     previous: playPrevious,
-  } = usePlaybackSdk();
+  } = playback;
   const [lastRemoved, setLastRemoved] = useState<RemovedTrack | null>(null);
+
+  // Pause playback (without disconnecting the shared SDK player) whenever the
+  // playlist screen unmounts, e.g. navigating away or logging out.
+  useEffect(() => {
+    return () => {
+      pause();
+    };
+  }, [pause]);
   const [playlistName, setPlaylistName] = useState(() => buildSuggestedName(title, moodLabel));
 
   const singleStage = stages.length === 1;
