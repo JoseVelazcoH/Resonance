@@ -262,3 +262,32 @@ mode. The response also carries `signals` (the four raw probabilities) and `excl
   gigabytes). The `laya`-marked integration test was written against the confirmed
   schema but was not executed in this session to keep turnaround reasonable; run it
   locally with `uv run pytest -m laya` to verify end to end against the real model.
+
+## Track mood profiling method (flat 7-mood, v5)
+
+Per-track lyrics profiling (`mood_dj/adapters/laya_track_profiler.py`) uses a flat
+7-mood taxonomy (`mood_dj/data/moods.json`: love, happiness, comfort, sadness,
+loneliness, anger, fear) instead of the deep emotion tree used for prompts
+(`mood_dj/domain/taxonomy.py`). This was decided from isolated-variable experiments
+on 30 hand-labeled tracks: the multilingual checkpoint, given plain-string state
+(lyrics only, no title/artist/dict wrapper), full lyrics text (`max_len=1024`, the
+checkpoint's own limit), and a single flat mood choice reached ~50% accuracy, versus
+~25% for the 4-level emotion-tree family pick and ~30% for a 500-character lyric
+excerpt. A binary positive/negative polarity question on the same input reached
+~83%. Measured cost was ~2.2s/track on CPU (batched).
+
+Each track's full mood probability distribution (not just the argmax) is persisted
+(`TrackMoodProfile.mood_probabilities`), so a mixed song (e.g. 50% love / 40%
+sadness) gets proportional credit when ranked against prompts of either mood
+(`mood_dj/domain/track_ranking.py`): the mood-match term is the probability mass on
+the target's mood, and the circumplex-proximity term uses the probability-weighted
+expected (valence, arousal) position across all 7 moods, not just the top pick's
+centroid.
+
+Caveats: 50% top-1 track-mood accuracy is well above the 1-in-7 (~14%) random
+baseline but still leaves real headroom; the binary polarity signal is the more
+reliable one (~83%) and dominates ranking's polarity-agreement term accordingly.
+Prompt-side analysis keeps the deep emotion tree (it measurably works better on
+short, direct prompts than on song lyrics) and bridges into the same flat mood space
+via `mood_dj.domain.moods.family_to_mood` for ranking. Re-run `scripts/eval_mood.py`
+against a labeled set to re-measure as the taxonomy or question wording evolves.
