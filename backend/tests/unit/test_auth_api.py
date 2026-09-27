@@ -181,3 +181,28 @@ def test_logout_clears_session() -> None:
 
     assert response.status_code == 200
     assert session_store.get("sess1") is None
+
+
+def test_token_requires_login() -> None:
+    _override()
+    client = TestClient(app)
+
+    response = client.get("/auth/token")
+
+    assert response.status_code == 401
+
+
+def test_token_returns_access_token_without_refresh_token() -> None:
+    session_store = FakeSessionStore()
+    session_store.save("sess1", SpotifyTokens(access_token="access-abc", refresh_token="refresh-xyz", expires_at=9999999999.0))
+    _override(session_store=session_store)
+    client = TestClient(app)
+    client.cookies.set("session_id", "sess1")
+
+    response = client.get("/auth/token")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body == {"access_token": "access-abc", "expires_at": 9999999999.0}
+    assert "refresh-xyz" not in response.text
+    assert response.headers["cache-control"] == "no-store"

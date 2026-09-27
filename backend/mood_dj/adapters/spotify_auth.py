@@ -5,6 +5,11 @@ PKCE is used so the client secret is not required for the token exchange itself
 consistent with public-client best practice). Scopes requested: playlist-read-private
 and playlist-read-collaborative to read the user's playlists, and
 playlist-modify-private to save a generated playlist back to their account.
+Additional scopes for the Web Playback SDK (see
+https://developer.spotify.com/documentation/web-playback-sdk): streaming (required to
+instantiate an SDK player), user-read-email and user-read-private (required by the SDK
+per the official quick start), and user-read-playback-state / user-modify-playback-state
+so the backend can start/transfer playback on the SDK device via the Web API.
 """
 
 from __future__ import annotations
@@ -22,7 +27,10 @@ from mood_dj.domain.models import SpotifyTokens
 
 AUTHORIZE_URL = "https://accounts.spotify.com/authorize"
 TOKEN_URL = "https://accounts.spotify.com/api/token"
-SCOPES = "playlist-read-private playlist-read-collaborative playlist-modify-private"
+SCOPES = (
+    "playlist-read-private playlist-read-collaborative playlist-modify-private "
+    "streaming user-read-email user-read-private user-read-playback-state user-modify-playback-state"
+)
 REQUEST_TIMEOUT = 10.0
 
 

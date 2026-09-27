@@ -2,19 +2,21 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from mood_dj.adapters.spotify_auth import build_authorize_url, generate_code_verifier, generate_state
 from mood_dj.api.deps import (
     get_auth_client,
     get_auth_state_store,
+    get_current_tokens,
     get_playlists_client,
     get_session_store,
     get_settings,
 )
-from mood_dj.api.schemas import MeResponse
+from mood_dj.api.schemas import MeResponse, TokenResponse
 from mood_dj.config import SESSION_COOKIE_NAME, Settings
+from mood_dj.domain.models import SpotifyTokens
 from mood_dj.ports.auth_state_store import AuthStateStore
 from mood_dj.ports.spotify_playlists import SpotifyPlaylistsClient
 from mood_dj.ports.spotify_session_store import SpotifySessionStore
@@ -83,6 +85,18 @@ def me(
 
     display_name = playlists_client.get_display_name(tokens.access_token)
     return MeResponse(logged_in=True, display_name=display_name)
+
+
+@router.get("/token", response_model=TokenResponse)
+def token(
+    response: Response,
+    tokens: SpotifyTokens = Depends(get_current_tokens),
+):
+    # The Web Playback SDK's getOAuthToken callback needs a short-lived access token.
+    # The refresh token must never leave the backend, and the response must never be
+    # cached by an intermediary or the browser.
+    response.headers["Cache-Control"] = "no-store"
+    return TokenResponse(access_token=tokens.access_token, expires_at=tokens.expires_at)
 
 
 @router.post("/logout")
