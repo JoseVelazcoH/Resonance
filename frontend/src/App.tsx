@@ -16,7 +16,6 @@ import {
 import { Header, type Screen } from "./components/Header";
 import { AnalysisScreen } from "./screens/AnalysisScreen";
 import { HomeScreen } from "./screens/HomeScreen";
-import { LoadingScreen } from "./screens/LoadingScreen";
 import { LyricsDownloadScreen } from "./screens/LyricsDownloadScreen";
 import { PlaylistScreen } from "./screens/PlaylistScreen";
 import { StartDownloadScreen } from "./screens/StartDownloadScreen";
@@ -24,7 +23,6 @@ import type {
   LibraryLyricsStatus,
   LibraryStatus,
   PlaylistRecommendResponse,
-  PlaylistSummary,
   RecommendJobStatus,
 } from "./types/api";
 
@@ -39,7 +37,6 @@ function App() {
 
   const [screen, setScreen] = useState<Screen>("home");
   const [prompt, setPrompt] = useState("");
-  const [playlists, setPlaylists] = useState<PlaylistSummary[]>([]);
   const [libraryError, setLibraryError] = useState<string | null>(null);
   const [lyricsStatus, setLyricsStatus] = useState<LibraryLyricsStatus | null>(null);
   const [libraryPrepareStatus, setLibraryPrepareStatus] = useState<LibraryStatus | null>(null);
@@ -80,7 +77,7 @@ function App() {
     }
     setLibraryError(null);
     fetchPlaylists()
-      .then(setPlaylists)
+      .then(() => {})
       .catch((err) => {
         if (err instanceof ApiError && err.status === 401) {
           setLoggedIn(false);
@@ -234,7 +231,8 @@ function App() {
         if (status.state === "done") {
           stopRecommendPolling();
           setPlaylistResult(status.result);
-          setScreen("analysis");
+          // Stay on the loading screen: it plays the decisions reveal and the
+          // playlist-grid highlight animation, then calls back to advance here.
         } else if (status.state === "error") {
           stopRecommendPolling();
           setLibraryError(status.error ?? "Failed to get recommendation");
@@ -251,7 +249,7 @@ function App() {
     setLibraryError(null);
     setPlaylistResult(null);
     setRecommendStatus(null);
-    setScreen("loading");
+    setScreen("analysis");
 
     try {
       const { job_id } = await startLibraryRecommendJob(moodPrompt);
@@ -302,7 +300,6 @@ function App() {
     libraryChecked.current = false;
     setLoggedIn(false);
     setDisplayName(null);
-    setPlaylists([]);
     setLyricsStatus(null);
     setLibraryPrepareStatus(null);
     setRecommendStatus(null);
@@ -311,7 +308,10 @@ function App() {
   };
 
   const handleNavigate = (target: Screen) => {
-    if ((target === "analysis" || target === "playlist") && !playlistResult) {
+    if (target === "analysis" && !recommendStatus) {
+      return;
+    }
+    if (target === "playlist" && !playlistResult) {
       return;
     }
     setScreen(target);
@@ -338,12 +338,14 @@ function App() {
       );
     }
 
-    if (screen === "loading") {
-      return <LoadingScreen playlists={playlists} recommendStatus={recommendStatus} />;
-    }
-
-    if (screen === "analysis" && playlistResult) {
-      return <AnalysisScreen result={playlistResult} onViewPlaylist={() => setScreen("playlist")} />;
+    if (screen === "analysis") {
+      return (
+        <AnalysisScreen
+          recommendStatus={recommendStatus}
+          result={playlistResult}
+          onViewPlaylist={() => setScreen("playlist")}
+        />
+      );
     }
 
     if (screen === "playlist" && playlistResult) {
@@ -371,6 +373,7 @@ function App() {
         loggedIn={loggedIn}
         displayName={displayName}
         hasResult={playlistResult !== null}
+        hasJobStarted={recommendStatus !== null}
         onNavigate={handleNavigate}
         onConnect={() => {
           window.location.href = loginUrl();

@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 
-const SUGGESTION_CHIPS = ["Energético", "Melancólico", "Chill", "Feliz", "Quiero descansar"];
+const SUGGESTION_CHIPS = ["Energetic", "Melancholic", "Chill", "Happy", "I want to rest"];
 
 interface HomeScreenProps {
   onSubmitPrompt: (prompt: string) => void;
@@ -21,8 +21,8 @@ export function HomeScreen({ onSubmitPrompt }: HomeScreenProps) {
   return (
     <div className="home-content">
       <div className="brand-intro">
-        <h1>Moodify</h1>
-        <p>Your mood, your music. Powered by AI and Spotify.</p>
+        <h1>Resonance</h1>
+        <p>Your mood, your music.</p>
       </div>
       {/* The pill is much taller than the input; clicking anywhere on it focuses the input. */}
       <div className="input-container" onClick={() => inputRef.current?.focus()}>
@@ -30,7 +30,7 @@ export function HomeScreen({ onSubmitPrompt }: HomeScreenProps) {
           ref={inputRef}
           type="text"
           value={prompt}
-          placeholder="¿Cómo te sientes hoy? Describe tu estado de ánimo..."
+          placeholder="How are you feeling today? Describe your mood..."
           onChange={(event) => setPrompt(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Enter") {
@@ -43,7 +43,7 @@ export function HomeScreen({ onSubmitPrompt }: HomeScreenProps) {
         </button>
       </div>
       <div className="suggestions-wrapper">
-        <p className="suggestions-label">o prueba con una sugerencia</p>
+        <p className="suggestions-label">or try a suggestion</p>
         <div className="suggestion-chips">
           {SUGGESTION_CHIPS.map((chip) => (
             <button key={chip} type="button" className="chip" onClick={() => onSubmitPrompt(chip)}>

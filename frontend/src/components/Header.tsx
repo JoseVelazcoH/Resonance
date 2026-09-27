@@ -1,13 +1,14 @@
 import brandIndicator from "../assets/brand-indicator.svg";
 import circleX from "../assets/circle-x.svg";
 
-export type Screen = "home" | "start-download" | "lyrics-download" | "loading" | "analysis" | "playlist";
+export type Screen = "home" | "start-download" | "lyrics-download" | "analysis" | "playlist";
 
 interface HeaderProps {
   activeScreen: Screen;
   loggedIn: boolean;
   displayName: string | null;
   hasResult: boolean;
+  hasJobStarted: boolean;
   onNavigate: (screen: Screen) => void;
   onConnect: () => void;
   onLogout: () => void;
@@ -18,20 +19,19 @@ export function Header({
   loggedIn,
   displayName,
   hasResult,
+  hasJobStarted,
   onNavigate,
   onConnect,
   onLogout,
 }: HeaderProps) {
   const navTarget =
-    activeScreen === "loading" || activeScreen === "start-download" || activeScreen === "lyrics-download"
-      ? "home"
-      : activeScreen;
+    activeScreen === "start-download" || activeScreen === "lyrics-download" ? "home" : activeScreen;
 
   return (
     <div className="top-header">
       <div className="brand-group">
         <img className="brand-indicator" src={brandIndicator} alt="" width={8} height={8} />
-        <p className="brand-name">Moodify</p>
+        <p className="brand-name">Resonance</p>
       </div>
       <div className="nav-links">
         <button
@@ -44,7 +44,7 @@ export function Header({
         <button
           type="button"
           className={`nav-link ${navTarget === "analysis" ? "is-active" : ""}`}
-          disabled={!hasResult}
+          disabled={!hasJobStarted}
           onClick={() => onNavigate("analysis")}
         >
           Analysis

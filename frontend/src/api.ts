@@ -7,6 +7,7 @@ import type {
   RecommendJobStarted,
   RecommendJobStatus,
   SavePlaylistResponse,
+  TokenResponse,
 } from "./types/api";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
@@ -52,6 +53,21 @@ export async function fetchMe(): Promise<MeResponse> {
 
 export async function logout(): Promise<void> {
   await requestJson<{ logged_out: boolean }>("/auth/logout", { method: "POST" });
+}
+
+export async function fetchPlaybackToken(): Promise<TokenResponse> {
+  return requestJson<TokenResponse>("/auth/token");
+}
+
+export async function startPlayback(
+  deviceId: string,
+  trackIds: string[],
+  offsetTrackId?: string,
+): Promise<void> {
+  await requestJson<{ playing: boolean }>("/player/play", {
+    method: "PUT",
+    body: JSON.stringify({ device_id: deviceId, track_ids: trackIds, offset_track_id: offsetTrackId ?? null }),
+  });
 }
 
 export async function fetchPlaylists(): Promise<PlaylistSummary[]> {

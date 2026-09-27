@@ -57,6 +57,18 @@ function statusBadge(status: LyricsRowStatus) {
   }
 }
 
+function screenTitle(status: LibraryLyricsStatus | null, libraryStatus: LibraryStatus | null): string {
+  if (!status || status.phase === "reading playlists") {
+    return "Reading your playlists...";
+  }
+
+  if (libraryStatus && libraryStatus.phase === "reading mood") {
+    return "Reading the mood of your songs...";
+  }
+
+  return "Downloading lyrics...";
+}
+
 function progressLabel(status: LibraryLyricsStatus | null, libraryStatus: LibraryStatus | null): string {
   if (!status) {
     return "Reading your playlists...";
@@ -118,7 +130,7 @@ export function LyricsDownloadScreen({
   return (
     <div className="lyrics-download-content">
       <div className="lyrics-download-status">
-        <h1>Downloading lyrics...</h1>
+        <h1>{screenTitle(status, libraryStatus)}</h1>
         <div className="progress-container">
           <div className="progress-bar-track">
             <div className="progress-bar-fill" style={{ width: `${percent}%` }} />

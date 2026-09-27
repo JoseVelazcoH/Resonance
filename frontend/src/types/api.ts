@@ -38,6 +38,11 @@ export interface MeResponse {
   display_name: string | null;
 }
 
+export interface TokenResponse {
+  access_token: string;
+  expires_at: number;
+}
+
 export interface PlaylistSummary {
   id: string;
   name: string;
@@ -108,6 +113,7 @@ export interface PlaylistTrack {
   name: string;
   artist: string;
   album: string;
+  duration_s: number;
   cover_url: string | null;
   external_url: string | null;
   keep_probability: number;
@@ -148,6 +154,30 @@ export interface Detected {
   target: DetectedTarget;
 }
 
+export interface LibraryTrackSummary {
+  id: string;
+  name: string;
+  artist: string;
+  cover_url: string | null;
+}
+
+export interface RankedTrack {
+  id: string;
+  name: string;
+  artist: string;
+  cover_url: string | null;
+  similarity: number | null;
+  selected: boolean;
+}
+
+export interface PlaylistContribution {
+  playlist_id: string;
+  name: string;
+  image_url: string | null;
+  track_count: number;
+  contributed: number;
+}
+
 export interface PlaylistRecommendResponse {
   strategy: string;
   signals: Record<string, number>;
@@ -156,6 +186,14 @@ export interface PlaylistRecommendResponse {
   excluded: Excluded;
   qualifying_count: number;
   threshold: number;
+  playlist_contributions: PlaylistContribution[];
+  ranked_tracks: RankedTrack[];
+}
+
+export interface Decisions {
+  strategy: string;
+  signals: Record<string, number>;
+  detected: Detected;
 }
 
 export interface RecommendJobStarted {
@@ -177,4 +215,6 @@ export interface RecommendJobStatus {
   total: number;
   result: PlaylistRecommendResponse | null;
   error: string | null;
+  decisions: Decisions | null;
+  library_tracks: LibraryTrackSummary[] | null;
 }

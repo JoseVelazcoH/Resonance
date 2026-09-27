@@ -1,13 +1,16 @@
 import { useMemo, useState } from "react";
 import musicIcon from "../assets/music.svg";
+import { PlayerBar } from "../components/PlayerBar";
+import { usePlaybackSdk } from "../hooks/usePlaybackSdk";
+import { strategyTitle } from "../lib/strategyTitles";
 import type { PlaylistRecommendResponse, PlaylistStage, PlaylistTrack } from "../types/api";
 
-const STRATEGY_TITLES: Record<string, string> = {
-  lift: "Lift Me Up",
-  accompany: "Keep Me Company",
-  energize: "Energize",
-  calm: "Calm & Reflective",
-};
+function formatDuration(seconds: number): string {
+  const totalSeconds = Math.max(0, Math.round(seconds));
+  const minutes = Math.floor(totalSeconds / 60);
+  const remainingSeconds = totalSeconds % 60;
+  return `${minutes}:${String(remainingSeconds).padStart(2, "0")}`;
+}
 
 interface PlaylistScreenProps {
   result: PlaylistRecommendResponse;
@@ -29,7 +32,7 @@ interface RemovedTrack {
 function buildSuggestedName(strategyTitle: string, moodLabel: string): string {
   const label = moodLabel.trim() || strategyTitle;
   const shortDate = new Date().toLocaleDateString(undefined, { month: "short", day: "numeric" });
-  return `Moodify · ${label} · ${shortDate}`;
+  return `Resonance · ${label} · ${shortDate}`;
 }
 
 export function PlaylistScreen({
@@ -42,11 +45,23 @@ export function PlaylistScreen({
   savedPlaylistId,
   savedPlaylistName,
 }: PlaylistScreenProps) {
-  const title = STRATEGY_TITLES[result.strategy] ?? result.strategy;
+  const title = strategyTitle(result.strategy);
   const [stages, setStages] = useState<PlaylistStage[]>(() =>
     result.stages.map((stage) => ({ ...stage, tracks: [...stage.tracks] })),
   );
-  const [playingTrackId, setPlayingTrackId] = useState<string | null>(null);
+  const {
+    currentTrackId,
+    isPaused,
+    position,
+    duration,
+    errorMessage,
+    errorKind,
+    playTracks,
+    togglePlay,
+    seek,
+    next: playNext,
+    previous: playPrevious,
+  } = usePlaybackSdk();
   const [lastRemoved, setLastRemoved] = useState<RemovedTrack | null>(null);
   const [playlistName, setPlaylistName] = useState(() => buildSuggestedName(title, moodLabel));
 
@@ -57,24 +72,28 @@ export function PlaylistScreen({
   const trackIds = useMemo(() => stages.flatMap((stage) => stage.tracks.map((track) => track.id)), [stages]);
 
   const playingTrack = useMemo(() => {
-    if (!playingTrackId) {
+    if (!currentTrackId) {
       return null;
     }
     for (const stage of stages) {
-      const found = stage.tracks.find((track) => track.id === playingTrackId);
+      const found = stage.tracks.find((track) => track.id === currentTrackId);
       if (found) {
         return found;
       }
     }
     return null;
-  }, [playingTrackId, stages]);
+  }, [currentTrackId, stages]);
 
-  const handlePlay = (trackId: string) => {
-    setPlayingTrackId((current) => (current === trackId ? null : trackId));
-  };
-
-  const handleClosePlayer = () => {
-    setPlayingTrackId(null);
+  const handleRowPlay = (trackId: string) => {
+    if (currentTrackId === trackId) {
+      togglePlay();
+      return;
+    }
+    const startIndex = trackIds.indexOf(trackId);
+    if (startIndex === -1) {
+      return;
+    }
+    void playTracks(trackIds, startIndex);
   };
 
   const handleRemove = (stageIndex: number, trackId: string) => {
@@ -92,9 +111,6 @@ export function PlaylistScreen({
       };
       return nextStages;
     });
-    if (playingTrackId === trackId) {
-      setPlayingTrackId(null);
-    }
   };
 
   const handleUndo = () => {
@@ -187,58 +203,66 @@ export function PlaylistScreen({
             </button>
           </div>
         )}
+        {!singleStage ? null : (
+          <div className="song-table-header">
+            <span className="song-table-header-index">#</span>
+            <span className="song-table-header-title">Title</span>
+            <span className="song-table-header-album">Album</span>
+            <span className="song-table-header-match">Match</span>
+            <span className="song-table-header-duration">Duration</span>
+          </div>
+        )}
         {stages.map((stage, stageIndex) => (
           <div key={stage.name}>
             {!singleStage && <p className="stage-label">{stage.name}</p>}
             {stage.tracks.map((track) => {
               index += 1;
               const matchPercent = Math.round(track.keep_probability * 100);
-              const isPlaying = playingTrackId === track.id;
+              const isCurrentTrack = currentTrackId === track.id;
+              const isPlaying = isCurrentTrack && !isPaused;
               return (
-                <div
-                  key={track.id}
-                  className={`song-row${isPlaying ? " is-playing" : ""}`}
-                  onClick={() => handlePlay(track.id)}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      handlePlay(track.id);
-                    }
-                  }}
-                >
-                  <p className="song-index">{String(index).padStart(2, "0")}</p>
+                <div key={track.id} className={`song-row${isCurrentTrack ? " is-playing" : ""}`}>
+                  <div className="song-index-cell">
+                    <span className="song-index">{String(index).padStart(2, "0")}</span>
+                    <button
+                      type="button"
+                      className="song-play-button"
+                      aria-label={isPlaying ? "Pause" : "Play"}
+                      onClick={() => handleRowPlay(track.id)}
+                    >
+                      {isPlaying ? "❚❚" : "▶"}
+                    </button>
+                  </div>
                   {track.cover_url ? (
                     <img className="album-art" src={track.cover_url} alt="" />
                   ) : (
                     <div className="album-art" />
                   )}
                   <div className="song-details">
-                    <p className="song-name">{track.name}</p>
+                    <span className="song-name">
+                      {track.name}
+                      {track.external_url && (
+                        <a
+                          className="song-external-link"
+                          href={track.external_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label="Open in Spotify"
+                        >
+                          ↗
+                        </a>
+                      )}
+                    </span>
                     <p className="song-artist">{track.artist}</p>
                   </div>
+                  <p className="song-album">{track.album}</p>
                   <div className="match-badge">{matchPercent}% match</div>
-                  {track.external_url && (
-                    <a
-                      className="song-external-link"
-                      href={track.external_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      aria-label="Open in Spotify"
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      ↗
-                    </a>
-                  )}
+                  <p className="song-duration">{formatDuration(track.duration_s)}</p>
                   <button
                     type="button"
                     className="song-remove-button"
                     aria-label="Remove from playlist"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      handleRemove(stageIndex, track.id);
-                    }}
+                    onClick={() => handleRemove(stageIndex, track.id)}
                   >
                     ×
                   </button>
@@ -249,26 +273,20 @@ export function PlaylistScreen({
         ))}
       </div>
 
-      {playingTrack && (
-        <div className="track-player">
-          <iframe
-            key={playingTrack.id}
-            title={`Now playing: ${playingTrack.name}`}
-            className="track-player-embed"
-            src={`https://open.spotify.com/embed/track/${playingTrack.id}`}
-            allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
-            loading="lazy"
-          />
-          <button
-            type="button"
-            className="track-player-close"
-            aria-label="Close player"
-            onClick={handleClosePlayer}
-          >
-            ×
-          </button>
-        </div>
-      )}
+      <PlayerBar
+        track={playingTrack}
+        isPaused={isPaused}
+        position={position}
+        duration={duration}
+        hasPrev={currentTrackId !== null && trackIds.indexOf(currentTrackId) > 0}
+        hasNext={currentTrackId !== null && trackIds.indexOf(currentTrackId) < trackIds.length - 1}
+        errorMessage={errorMessage}
+        errorKind={errorKind}
+        onTogglePlay={togglePlay}
+        onSeek={seek}
+        onPrev={playPrevious}
+        onNext={playNext}
+      />
     </div>
   );
 }
