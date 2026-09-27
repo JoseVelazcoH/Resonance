@@ -1,25 +1,29 @@
-"""MoodProfileRepository adapter backed by stdlib sqlite3, mirroring SqliteLyricsRepository."""
+"""MoodProfileRepository adapter backed by stdlib sqlite3, mirroring SqliteLyricsRepository.
+
+`track_mood_profiles_v3` is a new table (flat mood schema + full probability
+distribution, see `mood_dj.domain.models.TrackMoodProfile`); older
+`track_mood_profiles`/`track_mood_profiles_v2` tables are simply left in place
+and never read again -- profiles are keyed by `(track_id, version)` and the
+version bump in `laya_track_profiler.compute_version` means old rows are never
+looked up.
+"""
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from mood_dj.adapters.sqlite_connection import open_connection
 from mood_dj.domain.models import TrackMoodProfile
 
 _CREATE_TABLE = """
-CREATE TABLE IF NOT EXISTS track_mood_profiles (
+CREATE TABLE IF NOT EXISTS track_mood_profiles_v3 (
     track_id TEXT NOT NULL,
     version TEXT NOT NULL,
-    valence REAL NOT NULL,
-    arousal REAL NOT NULL,
-    polarity_id TEXT NOT NULL,
-    cluster_id TEXT NOT NULL,
-    family_id TEXT NOT NULL,
-    emotion_id TEXT,
-    emotion_confidence REAL,
-    situation_id TEXT,
-    situation_confidence REAL,
+    mood_id TEXT NOT NULL,
+    mood_confidence REAL NOT NULL,
+    positive_probability REAL NOT NULL,
+    mood_probabilities TEXT NOT NULL,
     PRIMARY KEY (track_id, version)
 )
 """
@@ -37,64 +41,63 @@ class SqliteMoodProfileRepository:
     def _connect(self):
         return open_connection(self._db_path)
 
+    def _row_to_profile(self, row) -> TrackMoodProfile:
+        return TrackMoodProfile(
+            track_id=row[0],
+            mood_id=row[1],
+            mood_confidence=row[2],
+            positive_probability=row[3],
+            mood_probabilities=json.loads(row[4]) if row[4] else {},
+            version=row[5],
+        )
+
     def get(self, track_id: str, version: str) -> TrackMoodProfile | None:
         with self._connect() as connection:
             row = connection.execute(
                 """
-                SELECT track_id, valence, arousal, polarity_id, cluster_id, family_id,
-                       emotion_id, emotion_confidence, situation_id, situation_confidence, version
-                FROM track_mood_profiles
+                SELECT track_id, mood_id, mood_confidence, positive_probability, mood_probabilities, version
+                FROM track_mood_profiles_v3
                 WHERE track_id = ? AND version = ?
                 """,
                 (track_id, version),
             ).fetchone()
         if row is None:
             return None
-        return TrackMoodProfile(
-            track_id=row[0],
-            valence=row[1],
-            arousal=row[2],
-            polarity_id=row[3],
-            cluster_id=row[4],
-            family_id=row[5],
-            emotion_id=row[6],
-            emotion_confidence=row[7],
-            situation_id=row[8],
-            situation_confidence=row[9],
-            version=row[10],
-        )
+        return self._row_to_profile(row)
+
+    def get_all(self, version: str) -> list[TrackMoodProfile]:
+        """Return every cached profile at exactly this version. Read-only, for diagnostics."""
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT track_id, mood_id, mood_confidence, positive_probability, mood_probabilities, version
+                FROM track_mood_profiles_v3
+                WHERE version = ?
+                """,
+                (version,),
+            ).fetchall()
+        return [self._row_to_profile(row) for row in rows]
 
     def save(self, profile: TrackMoodProfile) -> None:
         with self._connect() as connection:
             connection.execute(
                 """
-                INSERT INTO track_mood_profiles (
-                    track_id, version, valence, arousal, polarity_id, cluster_id,
-                    family_id, emotion_id, emotion_confidence, situation_id, situation_confidence
+                INSERT INTO track_mood_profiles_v3 (
+                    track_id, version, mood_id, mood_confidence, positive_probability, mood_probabilities
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?)
                 ON CONFLICT(track_id, version) DO UPDATE SET
-                    valence = excluded.valence,
-                    arousal = excluded.arousal,
-                    polarity_id = excluded.polarity_id,
-                    cluster_id = excluded.cluster_id,
-                    family_id = excluded.family_id,
-                    emotion_id = excluded.emotion_id,
-                    emotion_confidence = excluded.emotion_confidence,
-                    situation_id = excluded.situation_id,
-                    situation_confidence = excluded.situation_confidence
+                    mood_id = excluded.mood_id,
+                    mood_confidence = excluded.mood_confidence,
+                    positive_probability = excluded.positive_probability,
+                    mood_probabilities = excluded.mood_probabilities
                 """,
                 (
                     profile.track_id,
                     profile.version,
-                    profile.valence,
-                    profile.arousal,
-                    profile.polarity_id,
-                    profile.cluster_id,
-                    profile.family_id,
-                    profile.emotion_id,
-                    profile.emotion_confidence,
-                    profile.situation_id,
-                    profile.situation_confidence,
+                    profile.mood_id,
+                    profile.mood_confidence,
+                    profile.positive_probability,
+                    json.dumps(profile.mood_probabilities),
                 ),
             )

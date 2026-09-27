@@ -1,0 +1,78 @@
+{
+  "_meta": {
+    "method": "Flat 7-mood taxonomy for TRACK-level lyrics profiling. Replaces the deep emotion-tree descent used for tracks (see the mood-profiling-accuracy change): experiments on 30 hand-labeled tracks (see backend/eval/ and the change history) showed a single flat mood choice reaches ~50% accuracy vs. ~25% for the 4-level emotion-tree family pick, and a binary positive/negative polarity choice reaches ~83%. `criterion` is the exact short English wording style ('Themes of ...') used in that experiment. `families` lists every `mood_dj/data/emotions.json` family id that maps to this mood -- every emotions.json family maps to exactly one mood here (validated by `mood_dj.domain.moods`). Prompt-side analysis still descends the full emotion tree (it measurably works better there); `mood_dj.domain.moods.family_to_mood` is the bridge used to resolve a prompt's detected emotion family into the same mood space tracks live in.",
+    "valence_arousal_centroids": "Centroids are the mean of this mood's mapped families' emotions.json centroids (both in [-1, 1], Russell's circumplex model), not independently measured."
+  },
+  "moods": [
+    {
+      "id": "love",
+      "label": "Amor",
+      "criterion": "Themes of affection, care, romance, or loving memory",
+      "valence": 0.417,
+      "arousal": 0.333,
+      "polarity": "positive",
+      "families": ["love_affection", "desire_attraction", "unity_tenderness"]
+    },
+    {
+      "id": "happiness",
+      "label": "Felicidad",
+      "criterion": "Themes of being happy, celebration, having a good time, or feeling proud",
+      "valence": 0.55,
+      "arousal": 0.512,
+      "polarity": "positive",
+      "families": ["joy_elation", "confidence_achievement", "hope_optimism", "defiance_pride"]
+    },
+    {
+      "id": "comfort",
+      "label": "Consuelo",
+      "criterion": "Themes of safety, shelter, warmth, support, and relief",
+      "valence": 0.512,
+      "arousal": -0.2,
+      "polarity": "positive",
+      "families": ["calm_contentment", "calm_composure", "social_support", "kindness_virtue"]
+    },
+    {
+      "id": "sadness",
+      "label": "Tristeza",
+      "criterion": "Themes of sadness, grief, loss, or despair",
+      "valence": -0.533,
+      "arousal": -0.225,
+      "polarity": "negative",
+      "families": [
+        "sadness_grief",
+        "despair_hopelessness",
+        "shame_guilt",
+        "helplessness_weakness",
+        "failure_instability",
+        "submission_conformity"
+      ]
+    },
+    {
+      "id": "loneliness",
+      "label": "Soledad",
+      "criterion": "Themes of being alone, missing someone, nostalgia, or isolation",
+      "valence": -0.362,
+      "arousal": -0.063,
+      "polarity": "negative",
+      "families": ["loneliness_emptiness", "nostalgia_longing", "social_injury", "rejection_repudiation"]
+    },
+    {
+      "id": "anger",
+      "label": "Ira",
+      "criterion": "Themes of anger, hostility, betrayal, or frustration",
+      "valence": -0.6,
+      "arousal": 0.55,
+      "polarity": "negative",
+      "families": ["anger_hostility", "frustration_stress", "conflict_betrayal", "disgust_contempt"]
+    },
+    {
+      "id": "fear",
+      "label": "Miedo",
+      "criterion": "Themes of fear, anxiety, danger, or being afraid",
+      "valence": -0.333,
+      "arousal": 0.5,
+      "polarity": "negative",
+      "families": ["fear_anxiety", "confusion_disorientation", "surprise_alarm"]
+    }
+  ]
+}

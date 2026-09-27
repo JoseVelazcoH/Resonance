@@ -56,6 +56,12 @@ DEFAULT_CIRCUIT_BREAKER_THRESHOLD = 8
 DEFAULT_CIRCUIT_BREAKER_PAUSE_S = 60.0
 DEFAULT_RETRY_PASS_PAUSE_S = 30.0
 
+# A "missing" lyrics result (a definitive 404/no-match from LRCLIB) is cached
+# and never retried by default -- but LRCLIB's catalog grows over time, so a
+# track that was missing a month ago may have lyrics now. After this many days,
+# a cached `missing` entry becomes eligible for re-fetch during preparation.
+DEFAULT_LYRICS_MISSING_RETRY_DAYS = 30
+
 ProgressCallback = Callable[[LibraryPrepareProgress], None]
 
 PARTIAL_ERROR_TEMPLATE = "LRCLIB is unavailable right now, {count} tracks will be retried"
@@ -137,6 +143,8 @@ class PrepareLibraryUseCase:
         sleep_fn: Callable[[float], None] = time.sleep,
         now_fn: Callable[[], float] = time.monotonic,
         playlist_allowlist_file: str | None = None,
+        lyrics_missing_retry_days: int = DEFAULT_LYRICS_MISSING_RETRY_DAYS,
+        wall_clock_now_fn: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
     ) -> None:
         self._playlists_client = playlists_client
         self._lyrics_repository = lyrics_repository
@@ -152,6 +160,8 @@ class PrepareLibraryUseCase:
         self._circuit_breaker_pause_s = circuit_breaker_pause_s
         self._retry_pass_pause_s = retry_pass_pause_s
         self._sleep_fn = sleep_fn
+        self._lyrics_missing_retry_days = lyrics_missing_retry_days
+        self._wall_clock_now_fn = wall_clock_now_fn
         self._rate_limiter = _RateLimiter(min_request_interval_s, sleep_fn, now_fn)
 
     def run(
@@ -300,6 +310,7 @@ class PrepareLibraryUseCase:
             tracks,
             playlist_order=playlist_order,
             tracks_by_playlist=tracks_by_playlist,
+            playlists=playlists,
         )
         return tracks
 
@@ -328,7 +339,7 @@ class PrepareLibraryUseCase:
         pending: list[PlaylistTrack] = []
         for track in tracks:
             cached = self._lyrics_repository.get(track.id)
-            if cached is None:
+            if cached is None or self._is_stale_missing(cached):
                 pending.append(track)
             else:
                 with lock:
@@ -404,6 +415,25 @@ class PrepareLibraryUseCase:
         _run_with_daemon_workers(pending, process, self._max_lyrics_concurrency)
 
         return unresolved
+
+    def _is_stale_missing(self, entry: LyricsEntry) -> bool:
+        """True when a cached `missing` entry is older than the retry TTL.
+
+        A parse failure on `fetched_at` (should not happen for entries written
+        by this codebase) is treated as "not eligible" so a corrupt row never
+        causes a retry storm.
+        """
+
+        if entry.status is not LyricsStatus.MISSING:
+            return False
+        try:
+            fetched_at = datetime.fromisoformat(entry.fetched_at)
+        except ValueError:
+            return False
+        if fetched_at.tzinfo is None:
+            fetched_at = fetched_at.replace(tzinfo=timezone.utc)
+        age = self._wall_clock_now_fn() - fetched_at
+        return age.days >= self._lyrics_missing_retry_days
 
     def _count_status(self, status_value: str, progress: LibraryPrepareProgress) -> None:
         if status_value == "lyrics":

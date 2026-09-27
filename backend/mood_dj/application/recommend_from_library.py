@@ -20,6 +20,7 @@ from typing import Callable
 
 from mood_dj.application.library_store import LibraryStore
 from mood_dj.domain.models import LyricsStatus, PlaylistTrack, Strategy, TrackMoodProfile
+from mood_dj.domain.moods import MoodCatalog, load_moods
 from mood_dj.domain.taxonomy import (
     iter_all_situations,
     load_emotion_tree,
@@ -78,6 +79,35 @@ class RankedTrack:
 
 
 @dataclass(frozen=True)
+class LibraryTrackSummary:
+    """A lightweight library track, published early (before ranking finishes) so the
+    UI can render the whole-library grid while the run is still in progress."""
+
+    id: str
+    name: str
+    artist: str
+    cover_url: str | None
+
+
+@dataclass(frozen=True)
+class RankedLibraryTrack:
+    """One library track's ranking outcome, in library order.
+
+    `similarity` is None and `selected` is False for tracks that were excluded
+    from ranking (no lyrics, instrumental, or no cached mood profile yet) --
+    they are still included in this list so the UI grid always matches the full
+    library, they just never qualify for the playlist.
+    """
+
+    id: str
+    name: str
+    artist: str
+    cover_url: str | None
+    similarity: float | None
+    selected: bool
+
+
+@dataclass(frozen=True)
 class PlaylistStage:
     name: str
     tracks: list[RankedTrack] = field(default_factory=list)
@@ -104,6 +134,12 @@ class DetectedTarget:
 
 
 @dataclass(frozen=True)
+class DetectedMood:
+    id: str
+    label: str
+
+
+@dataclass(frozen=True)
 class Detected:
     """What Laya understood from the prompt, for transparency in the response."""
 
@@ -111,6 +147,31 @@ class Detected:
     family_id: str
     situation: DetectedSituation
     target: DetectedTarget
+    mood: DetectedMood = field(default_factory=lambda: DetectedMood(id="", label=""))
+
+
+@dataclass(frozen=True)
+class DecisionsSnapshot:
+    """What Laya has decided about the prompt, published as soon as it is known.
+
+    This is available well before track ranking finishes, so the UI can reveal
+    it while the (slower) ranking phase is still running.
+    """
+
+    strategy: Strategy
+    signal_probabilities: dict[str, float]
+    detected: Detected
+
+
+@dataclass(frozen=True)
+class PlaylistContribution:
+    """How many of the final recommended tracks came from one library playlist."""
+
+    playlist_id: str
+    name: str
+    image_url: str | None
+    track_count: int
+    contributed: int
 
 
 @dataclass(frozen=True)
@@ -124,6 +185,8 @@ class PlaylistRecommendation:
     excluded_no_profile: int
     qualifying_count: int = 0
     threshold: float = MATCH_THRESHOLD
+    playlist_contributions: list[PlaylistContribution] = field(default_factory=list)
+    ranked_tracks: list[RankedLibraryTrack] = field(default_factory=list)
 
 
 class RecommendFromLibraryUseCase:
@@ -148,12 +211,15 @@ class RecommendFromLibraryUseCase:
         self._match_threshold = match_threshold
         self._situations = load_situations()
         self._tree = load_emotion_tree()
+        self._moods = load_moods()
 
     def run(
         self,
         session_id: str,
         prompt: str,
         on_progress: RecommendProgressCallback | None = None,
+        on_decisions: Callable[[DecisionsSnapshot], None] | None = None,
+        on_library_tracks: Callable[[list[LibraryTrackSummary]], None] | None = None,
     ) -> PlaylistRecommendation:
         start = time.perf_counter()
         library = self._library_store.get(session_id)
@@ -162,51 +228,20 @@ class RecommendFromLibraryUseCase:
                 f"Library for session {session_id} is not prepared yet; call POST /library/prepare first."
             )
 
+        if on_library_tracks is not None:
+            on_library_tracks(
+                [
+                    LibraryTrackSummary(id=track.id, name=track.name, artist=track.artist, cover_url=track.cover_url)
+                    for track in library.tracks
+                ]
+            )
+
         def emit(phase: RecommendPhase, processed: int = 0, total: int = 0) -> None:
             if on_progress is not None:
                 on_progress(RecommendRunProgress(phase=phase.value, processed=processed, total=total))
 
         emit(RecommendPhase.UNDERSTANDING_MOOD)
         prompt_profile = self._prompt_profiler.profile(prompt)
-
-        tracks_by_id, profiles_by_id, excluded_no_lyrics, excluded_instrumental, excluded_no_profile = (
-            self._usable_profiles(library.tracks)
-        )
-
-        if not profiles_by_id:
-            raise LibraryNotPreparedError(
-                f"No profiled tracks for session {session_id}; run /library/prepare and retry."
-            )
-
-        emit(RecommendPhase.RANKING_TRACKS, total=len(profiles_by_id))
-
-        related_families, related_clusters = related_families_and_clusters(
-            self._tree, self._related_emotions(prompt_profile.situation.id)
-        )
-        target = TargetProfile(
-            valence=prompt_profile.target_valence,
-            arousal=prompt_profile.target_arousal,
-            polarity_id=prompt_profile.emotion.polarity_id,
-            cluster_id=prompt_profile.emotion.cluster_id,
-            family_id=prompt_profile.emotion.family_id,
-            emotion_id=prompt_profile.emotion.id,
-            situation_id=prompt_profile.situation.id,
-            situation_related_families=related_families,
-            situation_related_clusters=related_clusters,
-        )
-
-        base_ranked = [
-            RankedTrack(track=tracks_by_id[track_id], similarity=similarity(profile, target))
-            for track_id, profile in profiles_by_id.items()
-        ]
-        qualifying_count = sum(1 for ranked in base_ranked if ranked.similarity >= self._match_threshold)
-
-        if prompt_profile.strategy is Strategy.LIFT:
-            stages = self._lift_stages(tracks_by_id, profiles_by_id, target)
-        else:
-            stages = [self._single_stage(base_ranked)]
-
-        emit(RecommendPhase.RANKING_TRACKS, len(profiles_by_id), len(profiles_by_id))
 
         detected = Detected(
             emotion=DetectedEmotion(
@@ -221,7 +256,86 @@ class RecommendFromLibraryUseCase:
                 confidence=prompt_profile.situation.confidence,
             ),
             target=DetectedTarget(valence=prompt_profile.target_valence, arousal=prompt_profile.target_arousal),
+            mood=DetectedMood(id=prompt_profile.mood.id, label=prompt_profile.mood.label),
         )
+        if on_decisions is not None:
+            on_decisions(
+                DecisionsSnapshot(
+                    strategy=prompt_profile.strategy,
+                    signal_probabilities=prompt_profile.signal_probabilities,
+                    detected=detected,
+                )
+            )
+
+        tracks_by_id, profiles_by_id, excluded_no_lyrics, excluded_instrumental, excluded_no_profile = (
+            self._usable_profiles(library.tracks)
+        )
+
+        if not profiles_by_id:
+            raise LibraryNotPreparedError(
+                f"No profiled tracks for session {session_id}; run /library/prepare and retry."
+            )
+
+        emit(RecommendPhase.RANKING_TRACKS, total=len(profiles_by_id))
+
+        related_families, _related_clusters = related_families_and_clusters(
+            self._tree, self._related_emotions(prompt_profile.situation.id)
+        )
+        situation_related_moods = frozenset(
+            mood_id
+            for family_id in related_families
+            for mood_id in (self._moods.family_to_mood_id(family_id),)
+            if mood_id is not None
+        )
+        target = TargetProfile(
+            valence=prompt_profile.target_valence,
+            arousal=prompt_profile.target_arousal,
+            mood_id=prompt_profile.mood.id,
+            situation_id=prompt_profile.situation.id,
+            situation_related_moods=situation_related_moods,
+        )
+
+        base_ranked = [
+            RankedTrack(
+                track=tracks_by_id[track_id],
+                similarity=similarity(profile, target, self._moods),
+            )
+            for track_id, profile in profiles_by_id.items()
+        ]
+        qualifying_count = sum(1 for ranked in base_ranked if ranked.similarity >= self._match_threshold)
+
+        if prompt_profile.strategy is Strategy.LIFT:
+            stages = self._lift_stages(tracks_by_id, profiles_by_id, target)
+        else:
+            stages = [self._single_stage(base_ranked)]
+
+        emit(RecommendPhase.RANKING_TRACKS, len(profiles_by_id), len(profiles_by_id))
+
+        result_track_ids = {ranked.track.id for stage in stages for ranked in stage.tracks}
+        similarity_by_id = {ranked.track.id: ranked.similarity for ranked in base_ranked}
+        ranked_tracks = [
+            RankedLibraryTrack(
+                id=track.id,
+                name=track.name,
+                artist=track.artist,
+                cover_url=track.cover_url,
+                similarity=similarity_by_id.get(track.id),
+                selected=track.id in result_track_ids,
+            )
+            for track in library.tracks
+        ]
+        playlist_contributions = [
+            PlaylistContribution(
+                playlist_id=playlist.id,
+                name=playlist.name,
+                image_url=playlist.image_url,
+                track_count=playlist.track_count,
+                contributed=sum(
+                    1 for track_id in library.tracks_by_playlist.get(playlist.id, []) if track_id in result_track_ids
+                ),
+            )
+            for playlist in library.playlists
+        ]
 
         elapsed_ms = (time.perf_counter() - start) * 1000
         logger.info(
@@ -243,6 +357,8 @@ class RecommendFromLibraryUseCase:
             excluded_no_profile=excluded_no_profile,
             qualifying_count=qualifying_count,
             threshold=self._match_threshold,
+            playlist_contributions=playlist_contributions,
+            ranked_tracks=ranked_tracks,
         )
 
     def _usable_profiles(
@@ -298,20 +414,16 @@ class RecommendFromLibraryUseCase:
             shifted_target = TargetProfile(
                 valence=max(-1.0, min(1.0, base_target.valence + shift)),
                 arousal=base_target.arousal,
-                polarity_id=base_target.polarity_id,
-                cluster_id=base_target.cluster_id,
-                family_id=base_target.family_id,
-                emotion_id=base_target.emotion_id,
+                mood_id=base_target.mood_id,
                 situation_id=base_target.situation_id,
-                situation_related_families=base_target.situation_related_families,
-                situation_related_clusters=base_target.situation_related_clusters,
+                situation_related_moods=base_target.situation_related_moods,
             )
 
             ranked = []
             for track_id, profile in profiles_by_id.items():
                 if track_id in used_ids:
                     continue
-                score = similarity(profile, shifted_target)
+                score = similarity(profile, shifted_target, self._moods)
                 if score >= self._match_threshold:
                     ranked.append(RankedTrack(track=tracks_by_id[track_id], similarity=score))
             ranked.sort(key=lambda r: r.similarity, reverse=True)

@@ -1,16 +1,17 @@
 """Unit tests for LayaTrackProfiler, using a fake Laya Router.
 
-`predict_batch` is exercised with a fake router that answers deterministically
-from the question `criteria`, so tests can pin exact tree paths and assert on
-schema-sharing (grouping), single-child skipping, and confidence mapping.
+v5 (flat mood + full distribution): one `predict_batch` pass answers a flat
+`mood` choice (7 options, from `moods.json`) and a `noul` `polarity` question,
+fed the plain full lyrics string as `state` with `max_len` set to the
+multilingual checkpoint's limit.
 """
 
 from __future__ import annotations
 
 from mood_dj.adapters.laya_track_profiler import (
+    MULTILINGUAL_MAX_LEN,
     LayaTrackProfiler,
     compute_version,
-    extract_lyrics_excerpt,
 )
 from mood_dj.ports.track_profiler import TrackForProfiling
 
@@ -18,10 +19,9 @@ from mood_dj.ports.track_profiler import TrackForProfiling
 class FakeRouter:
     """Answers every question in a request deterministically from its criteria.
 
-    `answers_by_question` maps a question id to a function `(criteria) -> (choice,
-    probability)` for `choice` questions, or `(criteria) -> score` for `score`
-    questions. Records every batch of requests it receives so tests can assert on
-    schema-sharing.
+    `overrides` maps a question id to `{"choice": <key>, "prob": <float>}` for a
+    `choice` question, or `{"noul": <float>}` for a `noul` question. Records
+    every batch of requests it receives so tests can assert on request shape.
     """
 
     def __init__(self, overrides: dict | None = None) -> None:
@@ -34,10 +34,8 @@ class FakeRouter:
         for request in requests:
             answers = {}
             for qid, qdef in request["questions"].items():
-                if qdef["type"] == "score":
-                    levels = qdef["criteria"]
-                    index = self.overrides.get(qid, {}).get("score", (len(levels) - 1) // 2)
-                    answers[qid] = {"score": float(index)}
+                if qdef["type"] == "noul":
+                    answers[qid] = {"type": "noul", "noul": self.overrides.get(qid, {}).get("noul", 0.5)}
                 else:
                     keys = list(qdef["criteria"].keys())
                     default_choice = keys[0]
@@ -54,146 +52,103 @@ class FakeRouter:
 
 def _tracks(n: int) -> list[TrackForProfiling]:
     return [
-        TrackForProfiling(track_id=f"t{i}", artist="Artist", title=f"Song {i}", lyrics="la la la")
+        TrackForProfiling(track_id=f"t{i}", artist="Artist", title=f"Song {i}", lyrics=f"la la la {i}")
         for i in range(n)
     ]
 
 
-def test_level1_call_shares_one_schema_across_every_track() -> None:
+def test_single_batch_call_shares_one_schema_across_every_track() -> None:
     router = FakeRouter()
     profiler = LayaTrackProfiler(router=router, batch_size=100)
 
     profiler.profile(_tracks(3))
 
+    assert len(router.batches) == 1
     first_batch = router.batches[0]
     schemas = [set(req["questions"].keys()) for req in first_batch]
     assert all(s == schemas[0] for s in schemas)
-    assert schemas[0] == {"valence", "arousal", "polarity"}
+    assert schemas[0] == {"mood", "polarity"}
 
 
-def test_cluster_level_is_skipped_for_a_polarity_with_a_single_cluster() -> None:
-    # "positive" has exactly one cluster ("core_positive") in emotions.json.
-    router = FakeRouter(overrides={"polarity": {"choice": "positive"}})
+def test_request_state_is_the_plain_lyrics_string() -> None:
+    router = FakeRouter()
     profiler = LayaTrackProfiler(router=router, batch_size=100)
+    tracks = [TrackForProfiling(track_id="t1", artist="Artist", title="Song", lyrics="hola mundo")]
 
-    profiles = profiler.profile(_tracks(1))
+    profiler.profile(tracks)
 
-    assert profiles[0].polarity_id == "positive"
-    assert profiles[0].cluster_id == "core_positive"
-    # No predict_batch call should ever ask a "cluster" question for this track.
-    cluster_calls = [b for b in router.batches if any("cluster" in r["questions"] for r in b)]
-    assert cluster_calls == []
-
-
-def test_cluster_level_runs_for_a_polarity_with_multiple_clusters() -> None:
-    # "negative" has two clusters: acute_distress, relational_decline.
-    router = FakeRouter(
-        overrides={
-            "polarity": {"choice": "negative"},
-            "cluster": {"choice": "relational_decline", "prob": 0.77},
-        }
-    )
-    profiler = LayaTrackProfiler(router=router, batch_size=100)
-
-    profiles = profiler.profile(_tracks(1))
-
-    assert profiles[0].polarity_id == "negative"
-    assert profiles[0].cluster_id == "relational_decline"
-    cluster_calls = [b for b in router.batches if any("cluster" in r["questions"] for r in b)]
-    assert len(cluster_calls) == 1
+    request = router.batches[0][0]
+    assert request["state"] == "hola mundo"
+    assert isinstance(request["state"], str)
 
 
-def test_tracks_are_grouped_by_tree_node_so_schemas_match_within_a_call() -> None:
-    # Two tracks land on different polarities after level 1; the cluster-level
-    # requests for each must carry only that polarity's own cluster options.
-    def polarity_for(request):
-        return "positive" if "0" in request["state"]["title"] else "negative"
-
-    class MixedRouter(FakeRouter):
-        def predict_batch(self, requests):
-            self.batches.append(requests)
-            results = []
-            for request in requests:
-                answers = {}
-                for qid, qdef in request["questions"].items():
-                    if qid == "polarity":
-                        choice = polarity_for(request)
-                        answers[qid] = {"choice": choice, "probabilities": {choice: 1.0}}
-                    elif qdef["type"] == "score":
-                        answers[qid] = {"score": 2.0}
-                    else:
-                        keys = list(qdef["criteria"].keys())
-                        answers[qid] = {"choice": keys[0], "probabilities": {keys[0]: 1.0 / len(keys)}}
-                results.append({"answers": answers})
-            return results
-
-    router = MixedRouter()
-    profiler = LayaTrackProfiler(router=router, batch_size=100)
-
-    profiles = profiler.profile(_tracks(2))
-
-    by_id = {p.track_id: p for p in profiles}
-    assert by_id["t0"].polarity_id == "positive"
-    assert by_id["t0"].cluster_id == "core_positive"
-    assert by_id["t1"].polarity_id == "negative"
-    # t1's cluster question must have only offered negative's own clusters.
-    cluster_calls = [r for b in router.batches for r in b if "cluster" in r["questions"]]
-    assert len(cluster_calls) == 1
-    assert set(cluster_calls[0]["questions"]["cluster"]["criteria"].keys()) == {
-        "acute_distress",
-        "relational_decline",
-    }
-
-
-def test_confidence_is_the_probability_of_the_chosen_option() -> None:
-    router = FakeRouter(
-        overrides={
-            "polarity": {"choice": "positive"},
-            "family": {"prob": 0.42, "choice": "joy_elation"},
-        }
-    )
-    profiler = LayaTrackProfiler(router=router, batch_size=100)
-
-    profiles = profiler.profile(_tracks(1))
-
-    assert profiles[0].family_id == "joy_elation"
-
-
-def test_descent_stops_at_family_no_emotion_level_call_is_made() -> None:
-    router = FakeRouter(overrides={"polarity": {"choice": "positive"}})
-    profiler = LayaTrackProfiler(router=router, batch_size=100)
-
-    profiles = profiler.profile(_tracks(1))
-
-    assert profiles[0].emotion_id is None
-    assert profiles[0].emotion_confidence is None
-    emotion_calls = [b for b in router.batches if any("emotion" in r["questions"] for r in b)]
-    assert emotion_calls == []
-
-
-def test_valence_and_arousal_scores_map_onto_minus_one_to_one() -> None:
-    # 5 levels (index 0..4): index 0 -> -1.0, index 4 -> 1.0, index 2 -> 0.0.
-    router = FakeRouter(overrides={"valence": {"score": 4}, "arousal": {"score": 0}})
-    profiler = LayaTrackProfiler(router=router, batch_size=100)
-
-    profiles = profiler.profile(_tracks(1))
-
-    assert profiles[0].valence == 1.0
-    assert profiles[0].arousal == -1.0
-
-
-def test_tracks_no_longer_carry_a_situation_pick() -> None:
+def test_request_uses_the_multilingual_checkpoints_max_len_by_default() -> None:
     router = FakeRouter()
     profiler = LayaTrackProfiler(router=router, batch_size=100)
 
+    profiler.profile(_tracks(1))
+
+    assert router.batches[0][0]["max_len"] == MULTILINGUAL_MAX_LEN
+
+
+def test_custom_max_len_is_forwarded_to_the_request() -> None:
+    router = FakeRouter()
+    profiler = LayaTrackProfiler(router=router, batch_size=100, max_len=512)
+
+    profiler.profile(_tracks(1))
+
+    assert router.batches[0][0]["max_len"] == 512
+
+
+def test_mood_choice_offers_all_seven_moods() -> None:
+    router = FakeRouter()
+    profiler = LayaTrackProfiler(router=router, batch_size=100)
+
+    profiler.profile(_tracks(1))
+
+    mood_criteria = router.batches[0][0]["questions"]["mood"]["criteria"]
+    assert set(mood_criteria.keys()) == {
+        "love",
+        "happiness",
+        "comfort",
+        "sadness",
+        "loneliness",
+        "anger",
+        "fear",
+    }
+
+
+def test_profile_stores_mood_id_and_confidence_from_the_chosen_option() -> None:
+    router = FakeRouter(overrides={"mood": {"choice": "anger", "prob": 0.73}})
+    profiler = LayaTrackProfiler(router=router, batch_size=100)
+
     profiles = profiler.profile(_tracks(1))
 
-    assert profiles[0].situation_id is None
-    assert profiles[0].situation_confidence is None
-    situation_calls = [
-        r for b in router.batches for r in b if any("situation" in qid for qid in r["questions"])
-    ]
-    assert situation_calls == []
+    assert profiles[0].mood_id == "anger"
+    assert profiles[0].mood_confidence == 0.73
+
+
+def test_profile_stores_the_full_mood_probability_distribution() -> None:
+    router = FakeRouter(overrides={"mood": {"choice": "love", "prob": 0.4}})
+    profiler = LayaTrackProfiler(router=router, batch_size=100)
+
+    profiles = profiler.profile(_tracks(1))
+
+    distribution = profiles[0].mood_probabilities
+    assert set(distribution.keys()) == {
+        "love", "happiness", "comfort", "sadness", "loneliness", "anger", "fear",
+    }
+    assert distribution["love"] == 0.4
+    assert sum(distribution.values()) == 1.0 or abs(sum(distribution.values()) - 1.0) < 1e-9
+
+
+def test_profile_stores_positive_probability_from_the_polarity_noul() -> None:
+    router = FakeRouter(overrides={"polarity": {"noul": 0.88}})
+    profiler = LayaTrackProfiler(router=router, batch_size=100)
+
+    profiles = profiler.profile(_tracks(1))
+
+    assert profiles[0].positive_probability == 0.88
 
 
 def test_progress_callback_is_called_per_batch_with_completed_profiles() -> None:
@@ -222,14 +177,14 @@ def test_version_is_deterministic_and_matches_compute_version() -> None:
     assert profiler.version == compute_version()
 
 
-def test_version_changes_when_taxonomy_bytes_change(monkeypatch) -> None:
+def test_version_changes_when_moods_json_bytes_change(monkeypatch) -> None:
     from mood_dj.adapters import laya_track_profiler as module
 
     original = module._read_taxonomy_bytes
     before = module.compute_version()
 
     def patched(filename: str) -> bytes:
-        if filename == "emotions.json":
+        if filename == "moods.json":
             return original(filename) + b" "
         return original(filename)
 
@@ -239,80 +194,11 @@ def test_version_changes_when_taxonomy_bytes_change(monkeypatch) -> None:
     assert before != after
 
 
-# -- extract_lyrics_excerpt ---------------------------------------------------
+def test_every_track_gets_a_profile_for_the_same_batch() -> None:
+    router = FakeRouter()
+    profiler = LayaTrackProfiler(router=router, batch_size=2)
 
+    profiles = profiler.profile(_tracks(5))
 
-def test_excerpt_picks_the_repeated_chorus_block() -> None:
-    lyrics = (
-        "Verso uno, aqui empieza la historia\n"
-        "todo va bien por ahora\n"
-        "\n"
-        "No puedo mas, se me acaba el aire\n"
-        "grito tu nombre en la noche\n"
-        "\n"
-        "Verso dos, algo distinto ocurre\n"
-        "el camino se hace largo\n"
-        "\n"
-        "No puedo mas, se me acaba el aire\n"
-        "grito tu nombre en la noche\n"
-    )
-
-    excerpt = extract_lyrics_excerpt(lyrics, char_budget=500)
-
-    assert excerpt == "No puedo mas, se me acaba el aire\ngrito tu nombre en la noche"
-
-
-def test_excerpt_falls_back_to_first_lines_when_there_is_no_chorus() -> None:
-    lyrics = (
-        "Primera linea distinta\n"
-        "\n"
-        "Segunda linea distinta\n"
-        "\n"
-        "Tercera linea distinta\n"
-    )
-
-    excerpt = extract_lyrics_excerpt(lyrics, char_budget=500)
-
-    assert excerpt.startswith("Primera linea distinta")
-    assert "Segunda linea distinta" in excerpt
-
-
-def test_excerpt_is_capped_at_the_char_budget() -> None:
-    lyrics = "una linea muy larga que se repite mucho " * 50
-
-    excerpt = extract_lyrics_excerpt(lyrics, char_budget=100)
-
-    assert len(excerpt) <= 100
-
-
-def test_excerpt_of_very_short_lyrics_returns_them_unchanged() -> None:
-    lyrics = "Solo una linea corta."
-
-    excerpt = extract_lyrics_excerpt(lyrics, char_budget=500)
-
-    assert excerpt == "Solo una linea corta."
-
-
-def test_excerpt_of_empty_or_whitespace_lyrics_is_empty() -> None:
-    assert extract_lyrics_excerpt("", char_budget=500) == ""
-    assert extract_lyrics_excerpt("   \n\n  \n", char_budget=500) == ""
-
-
-def test_excerpt_strips_section_tags_like_coro() -> None:
-    lyrics = (
-        "[Verso]\n"
-        "Un dia cualquiera, el sol se asoma\n"
-        "\n"
-        "[Coro]\n"
-        "Vuela conmigo, siente el momento\n"
-        "vuela conmigo, siente el momento\n"
-        "\n"
-        "[Verso]\n"
-        "Otro dia cualquiera, la luna brilla\n"
-    )
-
-    excerpt = extract_lyrics_excerpt(lyrics, char_budget=500)
-
-    assert "[Coro]" not in excerpt
-    assert "[Verso]" not in excerpt
-    assert "Vuela conmigo, siente el momento" in excerpt
+    assert {p.track_id for p in profiles} == {f"t{i}" for i in range(5)}
+    assert all(p.version == profiler.version for p in profiles)

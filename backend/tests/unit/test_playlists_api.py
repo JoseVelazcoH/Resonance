@@ -4,15 +4,19 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from mood_dj.api.deps import get_current_tokens, get_playlists_client, get_recommend_job_manager, get_session_id
+from mood_dj.api.deps import get_current_tokens, get_playlists_client, get_recommend_job_manager, get_session_id, get_settings
 from mood_dj.api.main import app
+from mood_dj.config import Settings
 from mood_dj.application.recommend_from_library import (
+    DecisionsSnapshot,
     Detected,
     DetectedEmotion,
     DetectedSituation,
     DetectedTarget,
+    LibraryTrackSummary,
     PlaylistRecommendation,
     PlaylistStage,
+    RankedLibraryTrack,
     RankedTrack,
 )
 from mood_dj.application.recommend_job_manager import RecommendJobProgress, RecommendJobState
@@ -63,11 +67,24 @@ def test_list_playlists_requires_session() -> None:
     assert response.status_code == 401
 
 
+def _no_allowlist_settings() -> Settings:
+    return Settings(
+        spotify_client_id="id",
+        spotify_client_secret="secret",
+        dataset_path="data/tracks.parquet",
+        app_db_path=":memory:",
+        frontend_url="http://127.0.0.1:5173",
+        spotify_redirect_uri="http://127.0.0.1:8000/auth/callback",
+        playlist_allowlist_file="does-not-exist.json",
+    )
+
+
 def test_list_playlists_returns_mapped_summaries() -> None:
     app.dependency_overrides[get_current_tokens] = lambda: SpotifyTokens(
         access_token="tok", refresh_token="ref", expires_at=99999999999.0
     )
     app.dependency_overrides[get_playlists_client] = lambda: FakePlaylistsClient()
+    app.dependency_overrides[get_settings] = _no_allowlist_settings
     client = TestClient(app)
 
     response = client.get("/playlists")
@@ -76,6 +93,34 @@ def test_list_playlists_returns_mapped_summaries() -> None:
     body = response.json()
     assert body[0]["id"] == "pl1"
     assert body[0]["name"] == "My Playlist"
+
+
+def test_list_playlists_applies_allowlist_filter_when_configured(tmp_path) -> None:
+    allowlist_file = tmp_path / "playlists.local.json"
+    allowlist_file.write_text('{"playlist_allowlist": ["Other Playlist"]}')
+
+    def settings_with_allowlist() -> Settings:
+        return Settings(
+            spotify_client_id="id",
+            spotify_client_secret="secret",
+            dataset_path="data/tracks.parquet",
+            app_db_path=":memory:",
+            frontend_url="http://127.0.0.1:5173",
+            spotify_redirect_uri="http://127.0.0.1:8000/auth/callback",
+            playlist_allowlist_file=str(allowlist_file),
+        )
+
+    app.dependency_overrides[get_current_tokens] = lambda: SpotifyTokens(
+        access_token="tok", refresh_token="ref", expires_at=99999999999.0
+    )
+    app.dependency_overrides[get_playlists_client] = lambda: FakePlaylistsClient()
+    app.dependency_overrides[get_settings] = settings_with_allowlist
+    client = TestClient(app)
+
+    response = client.get("/playlists")
+
+    assert response.status_code == 200
+    assert response.json() == []
 
 
 class FakeRecommendJobManager:
@@ -113,6 +158,12 @@ def _sample_recommendation() -> PlaylistRecommendation:
         excluded_no_lyrics=2,
         excluded_instrumental=1,
         excluded_no_profile=0,
+        ranked_tracks=[
+            RankedLibraryTrack(
+                id="t1", name="Song", artist="Artist", cover_url="https://cover", similarity=0.8, selected=True
+            ),
+            RankedLibraryTrack(id="t2", name="Other", artist="Artist", cover_url=None, similarity=0.1, selected=False),
+        ],
     )
 
 
@@ -157,6 +208,37 @@ def test_recommend_job_status_reports_running_progress() -> None:
     assert body["result"] is None
 
 
+def test_recommend_job_status_exposes_decisions_before_result_exists() -> None:
+    app.dependency_overrides[get_current_tokens] = lambda: SpotifyTokens(
+        access_token="tok", refresh_token="ref", expires_at=99999999999.0
+    )
+    decisions = DecisionsSnapshot(
+        strategy=Strategy.ACCOMPANY,
+        signal_probabilities={"feels_bad": 0.9, "wants_change": 0.1, "wants_energy": 0.1, "wants_rest": 0.1},
+        detected=Detected(
+            emotion=DetectedEmotion(id="tristeza", label="Tristeza", confidence=0.8),
+            family_id="melancolia",
+            situation=DetectedSituation(id="rainy_day_home", label="Día de lluvia en casa", confidence=0.6),
+            target=DetectedTarget(valence=-0.3, arousal=-0.2),
+        ),
+    )
+    job = RecommendJobProgress(
+        state=RecommendJobState.RUNNING, phase="ranking tracks", processed=1, total=10, decisions=decisions
+    )
+    app.dependency_overrides[get_recommend_job_manager] = lambda: FakeRecommendJobManager(job=job)
+    app.dependency_overrides[get_session_id] = lambda: "session-1"
+    client = TestClient(app)
+
+    response = client.get("/recommend-jobs/job-1")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["result"] is None
+    assert body["decisions"]["strategy"] == "accompany"
+    assert body["decisions"]["detected"]["emotion"]["label"] == "Sadness"
+    assert body["decisions"]["signals"]["feels_bad"] == 0.9
+
+
 def test_recommend_job_status_returns_mapped_result_when_done() -> None:
     app.dependency_overrides[get_current_tokens] = lambda: SpotifyTokens(
         access_token="tok", refresh_token="ref", expires_at=99999999999.0
@@ -175,6 +257,36 @@ def test_recommend_job_status_returns_mapped_result_when_done() -> None:
     assert body["state"] == "done"
     assert body["result"]["strategy"] == "accompany"
     assert body["result"]["stages"][0]["tracks"][0]["keep_probability"] == 0.8
+    assert body["result"]["stages"][0]["tracks"][0]["duration_s"] == 200.0
+    assert body["result"]["ranked_tracks"][0] == {
+        "id": "t1", "name": "Song", "artist": "Artist", "cover_url": "https://cover",
+        "similarity": 0.8, "selected": True,
+    }
+    assert body["result"]["ranked_tracks"][1]["selected"] is False
+    assert body["result"]["ranked_tracks"][1]["similarity"] == 0.1
+
+
+def test_recommend_job_status_exposes_library_tracks_while_running() -> None:
+    app.dependency_overrides[get_current_tokens] = lambda: SpotifyTokens(
+        access_token="tok", refresh_token="ref", expires_at=99999999999.0
+    )
+    job = RecommendJobProgress(
+        state=RecommendJobState.RUNNING,
+        phase="ranking tracks",
+        processed=1,
+        total=10,
+        library_tracks=[LibraryTrackSummary(id="t1", name="Song", artist="Artist", cover_url="https://cover")],
+    )
+    app.dependency_overrides[get_recommend_job_manager] = lambda: FakeRecommendJobManager(job=job)
+    app.dependency_overrides[get_session_id] = lambda: "session-1"
+    client = TestClient(app)
+
+    response = client.get("/recommend-jobs/job-1")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["result"] is None
+    assert body["library_tracks"] == [{"id": "t1", "name": "Song", "artist": "Artist", "cover_url": "https://cover"}]
 
 
 def test_recommend_job_status_reports_error() -> None:

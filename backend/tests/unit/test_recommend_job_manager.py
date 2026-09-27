@@ -7,6 +7,7 @@ import time
 
 from mood_dj.application.recommend_job_manager import RecommendJobManager, RecommendJobState
 from mood_dj.application.recommend_from_library import (
+    LibraryTrackSummary,
     PlaylistRecommendation,
     RecommendPhase,
     RecommendRunProgress,
@@ -21,12 +22,14 @@ class BlockingUseCase:
         self.release = threading.Event()
         self.run_calls: list[tuple[str, str]] = []
 
-    def run(self, session_id: str, prompt: str, on_progress=None):
+    def run(self, session_id: str, prompt: str, on_progress=None, on_decisions=None, on_library_tracks=None):
         self.run_calls.append((session_id, prompt))
         self.started.set()
         self.release.wait(timeout=5)
         if on_progress is not None:
             on_progress(RecommendRunProgress(phase=RecommendPhase.RANKING_TRACKS.value, processed=1, total=1))
+        if on_library_tracks is not None:
+            on_library_tracks([LibraryTrackSummary(id="a", name="Song A", artist="Artist", cover_url=None)])
         return PlaylistRecommendation(
             strategy=None,
             signal_probabilities={},
@@ -95,7 +98,7 @@ def test_different_sessions_get_independent_jobs() -> None:
 
 def test_status_reports_error_when_use_case_raises() -> None:
     class FailingUseCase:
-        def run(self, session_id, prompt, on_progress=None):
+        def run(self, session_id, prompt, on_progress=None, on_decisions=None, on_library_tracks=None):
             raise RuntimeError("boom")
 
     manager = RecommendJobManager(use_case_factory=lambda: FailingUseCase())
@@ -132,6 +135,24 @@ def test_progress_callback_updates_phase_and_counts() -> None:
     assert status.phase == RecommendPhase.RANKING_TRACKS.value
     assert status.processed == 1
     assert status.total == 1
+
+
+def test_library_tracks_are_published_on_the_job() -> None:
+    use_case = BlockingUseCase()
+    use_case.release.set()
+    manager = RecommendJobManager(use_case_factory=lambda: use_case)
+
+    job_id = manager.start("session-1", "prompt")
+    for _ in range(50):
+        status = manager.status(job_id, "session-1")
+        if status is not None and status.state is RecommendJobState.DONE:
+            break
+        time.sleep(0.02)
+
+    status = manager.status(job_id, "session-1")
+    assert status is not None
+    assert status.library_tracks is not None
+    assert status.library_tracks[0].id == "a"
 
 
 def test_status_hides_jobs_owned_by_another_session() -> None:

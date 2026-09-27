@@ -11,6 +11,8 @@ from enum import Enum
 from typing import Callable, Protocol
 
 from mood_dj.application.recommend_from_library import (
+    DecisionsSnapshot,
+    LibraryTrackSummary,
     PlaylistRecommendation,
     RecommendPhase,
     RecommendRunProgress,
@@ -41,10 +43,14 @@ class RecommendJobProgress:
     total: int = 0
     result: PlaylistRecommendation | None = None
     error: str | None = None
+    decisions: DecisionsSnapshot | None = None
+    library_tracks: list[LibraryTrackSummary] | None = None
 
 
 class RecommendableUseCase(Protocol):
-    def run(self, session_id: str, prompt: str, on_progress=None) -> PlaylistRecommendation: ...
+    def run(
+        self, session_id: str, prompt: str, on_progress=None, on_decisions=None, on_library_tracks=None
+    ) -> PlaylistRecommendation: ...
 
 
 class RecommendJobManager:
@@ -93,8 +99,26 @@ class RecommendJobManager:
                     job.processed = progress.processed
                     job.total = progress.total
 
+        def on_decisions(decisions: DecisionsSnapshot) -> None:
+            with self._lock:
+                job = self._jobs.get(job_id)
+                if job is not None:
+                    job.decisions = decisions
+
+        def on_library_tracks(tracks: list[LibraryTrackSummary]) -> None:
+            with self._lock:
+                job = self._jobs.get(job_id)
+                if job is not None:
+                    job.library_tracks = tracks
+
         try:
-            result = use_case.run(session_id, prompt, on_progress=on_progress)
+            result = use_case.run(
+                session_id,
+                prompt,
+                on_progress=on_progress,
+                on_decisions=on_decisions,
+                on_library_tracks=on_library_tracks,
+            )
             with self._lock:
                 job = self._jobs[job_id]
                 job.state = RecommendJobState.DONE

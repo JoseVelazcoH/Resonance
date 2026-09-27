@@ -32,15 +32,9 @@ def _track(track_id: str) -> PlaylistTrack:
 def _profile(track_id: str, version: str = FAKE_VERSION) -> TrackMoodProfile:
     return TrackMoodProfile(
         track_id=track_id,
-        valence=0.5,
-        arousal=0.2,
-        polarity_id="positive",
-        cluster_id="core_positive",
-        family_id="joy_elation",
-        emotion_id="alegria",
-        emotion_confidence=0.9,
-        situation_id="party",
-        situation_confidence=0.8,
+        mood_id="happiness",
+        mood_confidence=0.9,
+        positive_probability=0.8,
         version=version,
     )
 

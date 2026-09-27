@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from mood_dj.domain.prompt_profile import EmotionPick, SituationPick, blend_target
+from mood_dj.domain.prompt_profile import DIRECT_SCORE_WEIGHT, EmotionPick, SituationPick, blend_target
 
 
 def _emotion(confidence: float, valence: float = 0.0, arousal: float = 0.0) -> EmotionPick:
@@ -26,12 +26,21 @@ def test_zero_confidence_picks_leave_the_direct_score_untouched() -> None:
 
 
 def test_full_confidence_emotion_and_situation_pull_toward_their_coordinates() -> None:
-    # With confidence 1.0 each and direct-score weight 1.0, all three terms are
-    # equal parts of the average.
+    # With confidence 1.0 each, the direct score only carries DIRECT_SCORE_WEIGHT
+    # while emotion/situation each carry their full confidence of 1.0, so the
+    # emotion/situation coordinates dominate the weighted average.
     valence, arousal = blend_target(0.0, 0.0, _emotion(1.0, 0.9, 0.6), _situation(1.0, -0.3, 0.3))
 
-    assert valence == pytest.approx((0.0 + 0.9 - 0.3) / 3)
-    assert arousal == pytest.approx((0.0 + 0.6 + 0.3) / 3)
+    total_weight = DIRECT_SCORE_WEIGHT + 1.0 + 1.0
+    assert valence == pytest.approx((0.0 * DIRECT_SCORE_WEIGHT + 0.9 - 0.3) / total_weight)
+    assert arousal == pytest.approx((0.0 * DIRECT_SCORE_WEIGHT + 0.6 + 0.3) / total_weight)
+
+
+def test_direct_score_weight_is_reduced_below_equal_weighting() -> None:
+    # Item 3 of the mood-ranking rebalance: the direct valence/arousal score
+    # question is the same miscalibrated question type used per-track, so it
+    # should carry less than equal (1.0) weight against emotion/situation picks.
+    assert 0.0 < DIRECT_SCORE_WEIGHT < 1.0
 
 
 def test_higher_confidence_component_dominates_the_blend() -> None:

@@ -6,19 +6,23 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from mood_dj.api.deps import (
     get_current_tokens,
+    get_library_diagnostics_use_case,
     get_library_job_manager,
     get_recommend_job_manager,
     get_session_id,
 )
 from mood_dj.api.schemas import (
+    LibraryDiagnosticsResponse,
     LibraryLyricsRowResponse,
     LibraryLyricsStatusResponse,
     LibraryLyricsSummaryResponse,
     LibraryPrepareStartedResponse,
     LibraryRecommendRequest,
     LibraryStatusResponse,
+    MoodDiagnosticsResponse,
     RecommendJobStartedResponse,
 )
+from mood_dj.application.library_diagnostics import LibraryDiagnosticsUseCase
 from mood_dj.application.prepare_library_job_manager import PrepareLibraryJobManager
 from mood_dj.application.recommend_job_manager import RecommendJobManager
 from mood_dj.domain.models import LibraryPrepareState, SpotifyTokens
@@ -124,3 +128,28 @@ def recommend_from_library(
 
     job_id = recommend_job_manager.start(session_id, request.prompt)
     return RecommendJobStartedResponse(job_id=job_id)
+
+
+@router.get("/diagnostics", response_model=LibraryDiagnosticsResponse)
+def library_diagnostics(
+    session_id: str = Depends(get_session_id),
+    diagnostics_use_case: LibraryDiagnosticsUseCase = Depends(get_library_diagnostics_use_case),
+):
+    report = diagnostics_use_case.run(session_id)
+    return LibraryDiagnosticsResponse(
+        moods=[
+            MoodDiagnosticsResponse(
+                mood_id=mood.mood_id,
+                count=mood.count,
+                mean_confidence=mood.mean_confidence,
+                mean_positive_probability=mood.mean_positive_probability,
+                mean_entropy=mood.mean_entropy,
+                mean_probabilities=mood.mean_probabilities,
+            )
+            for mood in report.moods
+        ],
+        profiled_count=report.profiled_count,
+        total_tracks=report.total_tracks,
+        unprofiled_share=report.unprofiled_share,
+        overall_mean_entropy=report.overall_mean_entropy,
+    )

@@ -1,25 +1,32 @@
 """Pure ranking: how well a cached per-track mood profile matches a prompt's target.
 
-`similarity(track_profile, target)` combines three signals into one score in
-[0, 1], as a weighted sum (weights sum to 1.0):
+`similarity(track_profile, target, moods)` combines four signals into one score
+in [0, 1], as a weighted sum (weights sum to 1.0):
 
-  (a) valence/arousal proximity: 1 - normalized Euclidean distance between the
-      track's (valence, arousal) and the target's. Both coordinates live in
-      [-1, 1], so the maximum possible distance is 2*sqrt(2).
-  (b) emotion-tree tier bonus: same leaf emotion scores highest, then same
-      family, then same cluster, then same polarity, then nothing.
-  (c) situation relatedness bonus: tracks no longer carry a situation pick (see
-      `mood_dj.adapters.laya_track_profiler`, v3) -- situations describe the
-      listener's context, not the song. Instead, the target's situation
-      `related_emotions` (from `situations.json`) are pre-resolved to the
-      families/clusters they belong to (`situation_related_families` /
-      `situation_related_clusters`), and a track scores a bonus when its own
-      family (stronger) or cluster (weaker) falls in one of those sets. This
-      keeps the situation signal in ranking while removing the two most
-      expensive per-track questions.
+  (a) mood match: the probability MASS the track's full mood distribution
+      (`TrackMoodProfile.mood_probabilities`, one probability per mood in
+      `mood_dj.domain.moods`) assigns to the target's mood -- not just whether
+      the track's single argmax mood equals the target's. This is what lets a
+      mixed song (e.g. 50% love / 40% sadness) get meaningful partial credit
+      against a "sadness" prompt even though "love" is its top pick.
+  (b) circumplex proximity: 1 - normalized Euclidean distance between the
+      target's (valence, arousal) point and the track's EXPECTED circumplex
+      position -- the probability-weighted average of every mood's centroid,
+      `sum(p(mood) * mood.centroid)` -- rather than just its top mood's
+      centroid, so a mixed song sits between its component moods instead of
+      snapping to one.
+  (c) polarity agreement: the track's `positive_probability` (the model's own
+      binary read of the lyrics) compared against the target's valence sign --
+      a track the model called clearly positive/negative agrees or disagrees
+      with a target that leans positive/negative.
+  (d) situation relatedness: the target's listening situation's
+      `related_emotions` (from `situations.json`) are pre-resolved, through the
+      emotion tree and then through `moods.json`, to the set of moods they
+      imply (`situation_related_moods`); a track scores a bonus proportional to
+      the probability mass it places on any of those moods.
 
-This module has no framework or I/O dependencies, so it is fully unit-testable
-with plain dataclasses.
+This module has no framework or I/O dependencies (`moods` is passed in), so it
+is fully unit-testable with plain dataclasses.
 """
 
 from __future__ import annotations
@@ -28,19 +35,17 @@ import math
 from dataclasses import dataclass, field
 
 from mood_dj.domain.models import TrackMoodProfile
+from mood_dj.domain.moods import MoodCatalog
 
-WEIGHT_VALENCE_AROUSAL = 0.5
-WEIGHT_EMOTION_TIER = 0.3
-WEIGHT_SITUATION = 0.2
+WEIGHT_MOOD_MATCH = 0.45
+WEIGHT_PROXIMITY = 0.25
+WEIGHT_POLARITY = 0.15
+WEIGHT_SITUATION = 0.15
 
-EMOTION_TIER_SAME_EMOTION = 1.0
-EMOTION_TIER_SAME_FAMILY = 0.7
-EMOTION_TIER_SAME_CLUSTER = 0.4
-EMOTION_TIER_SAME_POLARITY = 0.15
-EMOTION_TIER_NONE = 0.0
+MOOD_MATCH_SAME = 1.0
+MOOD_MATCH_NONE = 0.0
 
-SITUATION_RELATED_FAMILY = 1.0
-SITUATION_RELATED_CLUSTER = 0.5
+SITUATION_RELATED = 1.0
 SITUATION_NONE = 0.0
 
 # Both valence and arousal live in [-1, 1], so the widest possible gap on each
@@ -54,56 +59,96 @@ class TargetProfile:
 
     valence: float
     arousal: float
-    polarity_id: str
-    cluster_id: str
-    family_id: str
-    emotion_id: str
-    situation_id: str
-    situation_related_families: frozenset[str] = field(default_factory=frozenset)
-    situation_related_clusters: frozenset[str] = field(default_factory=frozenset)
+    mood_id: str
+    situation_id: str = ""
+    situation_related_moods: frozenset[str] = field(default_factory=frozenset)
 
 
-def _valence_arousal_proximity(track: TrackMoodProfile, target: TargetProfile) -> float:
-    distance = math.sqrt((track.valence - target.valence) ** 2 + (track.arousal - target.arousal) ** 2)
+def resolve_mood_centroid(moods: MoodCatalog, mood_id: str) -> tuple[float, float]:
+    """Resolve a mood id to its (valence, arousal) circumplex centroid.
+
+    Falls back to (0.0, 0.0) -- the circumplex origin -- for an unrecognized
+    mood id (e.g. a profile cached under a stale `moods.json` version), which
+    neither favors nor penalizes the track in the proximity term.
+    """
+
+    mood = moods.by_id(mood_id)
+    if mood is None:
+        return 0.0, 0.0
+    return mood.valence, mood.arousal
+
+
+def _track_distribution(track: TrackMoodProfile) -> dict[str, float]:
+    """The track's full mood distribution, falling back to a one-hot on `mood_id`.
+
+    The fallback keeps this module working for a profile that has no
+    `mood_probabilities` (e.g. hand-built in a test, or a stale cached row from
+    before that field existed).
+    """
+
+    if track.mood_probabilities:
+        return track.mood_probabilities
+    return {track.mood_id: 1.0}
+
+
+def expected_position(track: TrackMoodProfile, moods: MoodCatalog) -> tuple[float, float]:
+    """The track's probability-weighted expected (valence, arousal) position.
+
+    `sum(p(mood) * mood.centroid)` over the track's full mood distribution, so a
+    mixed song sits between its component moods' centroids instead of snapping
+    to only its top pick.
+    """
+
+    distribution = _track_distribution(track)
+    total_weight = sum(distribution.values()) or 1.0
+    valence = 0.0
+    arousal = 0.0
+    for mood_id, probability in distribution.items():
+        mood_valence, mood_arousal = resolve_mood_centroid(moods, mood_id)
+        valence += probability * mood_valence
+        arousal += probability * mood_arousal
+    return valence / total_weight, arousal / total_weight
+
+
+def _proximity(track: TrackMoodProfile, target: TargetProfile, moods: MoodCatalog) -> float:
+    track_valence, track_arousal = expected_position(track, moods)
+    distance = math.sqrt((track_valence - target.valence) ** 2 + (track_arousal - target.arousal) ** 2)
     normalized = min(1.0, distance / _MAX_CIRCUMPLEX_DISTANCE)
     return 1.0 - normalized
 
 
-def _emotion_tier_bonus(track: TrackMoodProfile, target: TargetProfile) -> float:
-    # Tracks profiled since the family-level descent change (see
-    # laya_track_profiler.py) have `emotion_id is None`, so family is the finest
-    # tier ever reached for them. Older cached profiles that still carry a real
-    # `emotion_id` (a different `version`) keep getting the finer same-emotion
-    # tier, for backward compatibility.
-    if track.emotion_id is not None and track.emotion_id == target.emotion_id:
-        return EMOTION_TIER_SAME_EMOTION
-    if track.family_id == target.family_id:
-        return EMOTION_TIER_SAME_FAMILY
-    if track.cluster_id == target.cluster_id:
-        return EMOTION_TIER_SAME_CLUSTER
-    if track.polarity_id == target.polarity_id:
-        return EMOTION_TIER_SAME_POLARITY
-    return EMOTION_TIER_NONE
+def _mood_match_bonus(track: TrackMoodProfile, target: TargetProfile) -> float:
+    distribution = _track_distribution(track)
+    return distribution.get(target.mood_id, MOOD_MATCH_NONE)
+
+
+def _polarity_agreement(track: TrackMoodProfile, target: TargetProfile) -> float:
+    # Map the target's valence ([-1, 1]) onto the same [0, 1] scale as
+    # `positive_probability`, then score how close the track's own polarity
+    # read is to that target polarity.
+    target_positive = (target.valence + 1.0) / 2.0
+    return 1.0 - abs(track.positive_probability - target_positive)
 
 
 def _situation_bonus(track: TrackMoodProfile, target: TargetProfile) -> float:
-    if not target.situation_id:
+    if not target.situation_id or not target.situation_related_moods:
         return SITUATION_NONE
-    if track.family_id in target.situation_related_families:
-        return SITUATION_RELATED_FAMILY
-    if track.cluster_id in target.situation_related_clusters:
-        return SITUATION_RELATED_CLUSTER
-    return SITUATION_NONE
+    distribution = _track_distribution(track)
+    mass = sum(distribution.get(mood_id, 0.0) for mood_id in target.situation_related_moods)
+    return SITUATION_RELATED * min(1.0, mass)
 
 
-def similarity(track: TrackMoodProfile, target: TargetProfile) -> float:
+def similarity(track: TrackMoodProfile, target: TargetProfile, moods: MoodCatalog) -> float:
     """Return how well `track` matches `target`, in [0, 1]."""
 
-    proximity = _valence_arousal_proximity(track, target)
-    emotion_bonus = _emotion_tier_bonus(track, target)
-    situation_bonus = _situation_bonus(track, target)
+    mood_bonus = _mood_match_bonus(track, target)
+    proximity = _proximity(track, target, moods)
+    polarity = _polarity_agreement(track, target)
+    situation = _situation_bonus(track, target)
+
     return (
-        WEIGHT_VALENCE_AROUSAL * proximity
-        + WEIGHT_EMOTION_TIER * emotion_bonus
-        + WEIGHT_SITUATION * situation_bonus
+        WEIGHT_MOOD_MATCH * mood_bonus
+        + WEIGHT_PROXIMITY * proximity
+        + WEIGHT_POLARITY * polarity
+        + WEIGHT_SITUATION * situation
     )

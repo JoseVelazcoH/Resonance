@@ -49,6 +49,17 @@ class MeResponse(BaseModel):
     display_name: str | None = None
 
 
+class TokenResponse(BaseModel):
+    access_token: str
+    expires_at: float
+
+
+class PlayerPlayRequest(BaseModel):
+    device_id: str
+    track_ids: list[str]
+    offset_track_id: str | None = None
+
+
 class PlaylistSummaryResponse(BaseModel):
     id: str
     name: str
@@ -62,6 +73,7 @@ class PlaylistTrackResponse(BaseModel):
     name: str
     artist: str
     album: str
+    duration_s: float
     cover_url: str | None
     external_url: str | None
     keep_probability: float
@@ -95,11 +107,41 @@ class DetectedTargetResponse(BaseModel):
     arousal: float
 
 
+class DetectedMoodResponse(BaseModel):
+    id: str
+    label: str
+
+
 class DetectedResponse(BaseModel):
     emotion: DetectedEmotionResponse
     family_id: str
     situation: DetectedSituationResponse
     target: DetectedTargetResponse
+    mood: DetectedMoodResponse
+
+
+class LibraryTrackResponse(BaseModel):
+    id: str
+    name: str
+    artist: str
+    cover_url: str | None
+
+
+class RankedTrackResponse(BaseModel):
+    id: str
+    name: str
+    artist: str
+    cover_url: str | None
+    similarity: float | None
+    selected: bool
+
+
+class PlaylistContributionResponse(BaseModel):
+    playlist_id: str
+    name: str
+    image_url: str | None
+    track_count: int
+    contributed: int
 
 
 class PlaylistRecommendResponse(BaseModel):
@@ -110,6 +152,14 @@ class PlaylistRecommendResponse(BaseModel):
     excluded: ExcludedResponse
     qualifying_count: int = 0
     threshold: float = 0.65
+    playlist_contributions: list[PlaylistContributionResponse] = []
+    ranked_tracks: list[RankedTrackResponse] = []
+
+
+class DecisionsResponse(BaseModel):
+    strategy: str
+    signals: dict[str, float]
+    detected: DetectedResponse
 
 
 class LibraryPrepareStartedResponse(BaseModel):
@@ -171,6 +221,23 @@ class LibraryRecommendRequest(BaseModel):
     prompt: str
 
 
+class MoodDiagnosticsResponse(BaseModel):
+    mood_id: str
+    count: int
+    mean_confidence: float
+    mean_positive_probability: float
+    mean_entropy: float
+    mean_probabilities: dict[str, float]
+
+
+class LibraryDiagnosticsResponse(BaseModel):
+    moods: list[MoodDiagnosticsResponse]
+    profiled_count: int
+    total_tracks: int
+    unprofiled_share: float
+    overall_mean_entropy: float
+
+
 class RecommendJobStartedResponse(BaseModel):
     job_id: str
 
@@ -191,3 +258,5 @@ class RecommendJobStatusResponse(BaseModel):
     total: int
     result: PlaylistRecommendResponse | None = None
     error: str | None = None
+    decisions: DecisionsResponse | None = None
+    library_tracks: list[LibraryTrackResponse] | None = None

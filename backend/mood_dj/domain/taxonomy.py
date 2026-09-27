@@ -49,12 +49,20 @@ class EmotionCluster:
 
 @dataclass(frozen=True)
 class EmotionPolarity:
-    """The top-level branch of the emotion tree (positive/negative/ambivalent)."""
+    """The top-level branch of the emotion tree (positive/negative/ambivalent).
+
+    `description` defaults to "" because the packaged `emotions.json` carries
+    no polarity-level description (only bare ids); a candidate taxonomy (see
+    `scripts/eval_mood.py` / `eval/emotions.candidate.json`) can add one with
+    concrete bilingual cues, which the profilers prefer over the generic
+    "mostly {id} polarity" fallback question wording when present.
+    """
 
     id: str
     centroid_valence: float
     centroid_arousal: float
     clusters: tuple[EmotionCluster, ...]
+    description: str = ""
 
 
 @dataclass(frozen=True)
@@ -142,7 +150,24 @@ def _build_polarity(polarity_id: str, raw: dict) -> EmotionPolarity:
         centroid_valence=raw["centroid"]["valence"],
         centroid_arousal=raw["centroid"]["arousal"],
         clusters=clusters,
+        description=raw.get("description", ""),
     )
+
+
+def parse_emotion_tree(raw: dict) -> EmotionTree:
+    """Build an `EmotionTree` from an already-parsed emotions JSON document.
+
+    Exposed separately from `load_emotion_tree` so callers (e.g. the eval
+    harness in `scripts/eval_mood.py`) can build a tree from an arbitrary
+    candidate taxonomy file without touching the packaged `emotions.json` or
+    the cached loader below.
+    """
+
+    polarities = tuple(
+        _build_polarity(polarity_id, polarity_raw)
+        for polarity_id, polarity_raw in raw["polarities"].items()
+    )
+    return EmotionTree(meta=raw["_meta"], polarities=polarities)
 
 
 @lru_cache(maxsize=1)
@@ -150,11 +175,21 @@ def load_emotion_tree() -> EmotionTree:
     """Load and parse `emotions.json` into an `EmotionTree`."""
 
     raw = _read_json("emotions.json")
-    polarities = tuple(
-        _build_polarity(polarity_id, polarity_raw)
-        for polarity_id, polarity_raw in raw["polarities"].items()
-    )
-    return EmotionTree(meta=raw["_meta"], polarities=polarities)
+    return parse_emotion_tree(raw)
+
+
+def load_emotion_tree_from_path(path: str) -> EmotionTree:
+    """Load and parse an emotions JSON document from an arbitrary file path.
+
+    Used by the eval harness to evaluate a candidate taxonomy (e.g.
+    `backend/eval/emotions.candidate.json`) without editing the packaged
+    `mood_dj/data/emotions.json` (which would bump `compute_version` and
+    invalidate every cached track profile).
+    """
+
+    with open(path, "r", encoding="utf-8") as fh:
+        raw = json.load(fh)
+    return parse_emotion_tree(raw)
 
 
 @lru_cache(maxsize=1)

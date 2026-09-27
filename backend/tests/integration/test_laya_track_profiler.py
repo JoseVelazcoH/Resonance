@@ -24,18 +24,18 @@ ANGRY_SPANISH_LYRICS = (
     "quiero romperlo todo, esta ira no se apaga."
 )
 
-CALM_SPANISH_LYRICS = (
-    "La brisa suave mece las hojas al atardecer, todo esta en paz y en silencio, "
-    "respiro tranquilo mientras el sol se despide despacio, "
-    "una calma dulce envuelve este momento sereno."
+LOVE_SPANISH_LYRICS = (
+    "Te quiero con toda el alma, mi corazon es tuyo desde el primer dia, "
+    "cada momento a tu lado es un regalo, sueño con abrazarte para siempre, "
+    "eres el amor de mi vida y no imagino el mundo sin ti."
 )
 
 
-def test_profile_orders_angry_and_calm_lyrics_sensibly() -> None:
+def test_profile_orders_angry_and_love_lyrics_sensibly() -> None:
     profiler = LayaTrackProfiler()
     tracks = [
         TrackForProfiling(track_id="angry", artist="Artist", title="Angry Song", lyrics=ANGRY_SPANISH_LYRICS),
-        TrackForProfiling(track_id="calm", artist="Artist", title="Calm Song", lyrics=CALM_SPANISH_LYRICS),
+        TrackForProfiling(track_id="love", artist="Artist", title="Love Song", lyrics=LOVE_SPANISH_LYRICS),
     ]
 
     start = time.process_time()
@@ -46,21 +46,24 @@ def test_profile_orders_angry_and_calm_lyrics_sensibly() -> None:
     print(f"\nLaya track profiling CPU time: {elapsed:.2f}s total, {per_track:.2f}s/track (batched, n={len(tracks)})")
 
     by_id = {p.track_id: p for p in profiles}
-    angry, calm = by_id["angry"], by_id["calm"]
-    print(f"angry: valence={angry.valence:.3f} arousal={angry.arousal:.3f} family={angry.family_id}")
-    print(f"calm:  valence={calm.valence:.3f} arousal={calm.arousal:.3f} family={calm.family_id}")
+    angry, love = by_id["angry"], by_id["love"]
+    print(
+        f"angry: mood={angry.mood_id} confidence={angry.mood_confidence:.3f} "
+        f"positive_probability={angry.positive_probability:.3f}"
+    )
+    print(
+        f"love:  mood={love.mood_id} confidence={love.mood_confidence:.3f} "
+        f"positive_probability={love.positive_probability:.3f}"
+    )
 
-    # The angry track should read as more negative and more aroused than the calm one.
-    assert angry.valence < calm.valence
-    assert angry.arousal > calm.arousal
-    assert angry.polarity_id == "negative"
+    assert angry.mood_id == "anger"
+    assert angry.positive_probability < 0.5
+    assert love.mood_id == "love"
+    assert love.positive_probability > 0.5
+
     for profile in profiles:
-        # Tree descent stops at family for tracks: no per-track emotion-level call.
-        assert profile.emotion_id is None
-        assert profile.emotion_confidence is None
-        # Situations were dropped from track-level questions (v3): tracks no
-        # longer carry a situation pick (see mood_dj.domain.track_ranking for
-        # the prompt-situation relatedness bonus that replaced it).
-        assert profile.situation_id is None
-        assert profile.situation_confidence is None
         assert profile.version == profiler.version
+        assert set(profile.mood_probabilities.keys()) == {
+            "love", "happiness", "comfort", "sadness", "loneliness", "anger", "fear",
+        }
+        assert profile.mood_probabilities[profile.mood_id] == pytest.approx(profile.mood_confidence)

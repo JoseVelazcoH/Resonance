@@ -17,7 +17,9 @@ from mood_dj.adapters.sqlite_lyrics_repository import SqliteLyricsRepository
 from mood_dj.adapters.sqlite_mood_profile_repository import SqliteMoodProfileRepository
 from mood_dj.adapters.sqlite_session_store import SqliteSessionStore
 from mood_dj.adapters.spotify_auth import SpotifyAuthClient
+from mood_dj.adapters.spotify_player import SpotifyPlayerClient
 from mood_dj.adapters.spotify_playlists import SpotifyPlaylistsClient
+from mood_dj.application.library_diagnostics import LibraryDiagnosticsUseCase
 from mood_dj.application.library_lyrics_status import LibraryLyricsStatusStore
 from mood_dj.application.library_store import LibraryStore
 from mood_dj.application.prepare_library import PrepareLibraryUseCase
@@ -33,6 +35,7 @@ from mood_dj.ports.lyrics_provider import LyricsProvider
 from mood_dj.ports.lyrics_repository import LyricsRepository
 from mood_dj.ports.mood_profile_repository import MoodProfileRepository
 from mood_dj.ports.prompt_profiler import PromptProfiler
+from mood_dj.ports.spotify_player import SpotifyPlayerClient as SpotifyPlayerClientPort
 from mood_dj.ports.spotify_playlists import SpotifyPlaylistsClient as SpotifyPlaylistsClientPort
 from mood_dj.ports.track_profiler import TrackProfiler
 from mood_dj.ports.spotify_session_store import SpotifySessionStore
@@ -71,6 +74,11 @@ def get_playlists_client() -> SpotifyPlaylistsClientPort:
 
 
 @lru_cache(maxsize=1)
+def get_player_client() -> SpotifyPlayerClientPort:
+    return SpotifyPlayerClient()
+
+
+@lru_cache(maxsize=1)
 def get_lyrics_provider() -> LyricsProvider:
     return LrclibLyricsProvider()
 
@@ -91,7 +99,7 @@ def get_lyrics_judge() -> LyricsJudge:
 def get_track_profiler() -> TrackProfiler:
     # lru_cache ensures the Laya Router (and its loaded checkpoints) is built once
     # and shared across requests instead of being reloaded per call.
-    return LayaTrackProfiler(lyrics_char_budget=get_settings().track_lyrics_char_budget)
+    return LayaTrackProfiler()
 
 
 @lru_cache(maxsize=1)
@@ -128,6 +136,7 @@ def get_library_job_manager() -> PrepareLibraryJobManager:
             track_profiler=get_track_profiler(),
             mood_profile_repository=get_mood_profile_repository(),
             playlist_allowlist_file=get_settings().playlist_allowlist_file,
+            lyrics_missing_retry_days=get_settings().lyrics_missing_retry_days,
         )
 
     return PrepareLibraryJobManager(use_case_factory=factory, lyrics_status_store=get_library_lyrics_status_store())
@@ -147,6 +156,15 @@ def get_recommend_from_library_use_case() -> RecommendFromLibraryUseCase:
 @lru_cache(maxsize=1)
 def get_recommend_job_manager() -> RecommendJobManager:
     return RecommendJobManager(use_case_factory=get_recommend_from_library_use_case)
+
+
+@lru_cache(maxsize=1)
+def get_library_diagnostics_use_case() -> LibraryDiagnosticsUseCase:
+    return LibraryDiagnosticsUseCase(
+        library_store=get_library_store(),
+        mood_profile_repository=get_mood_profile_repository(),
+        profile_version=get_track_profiler().version,
+    )
 
 
 def get_session_id(session_id: str | None = Cookie(default=None)) -> str:

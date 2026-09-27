@@ -6,12 +6,14 @@ from fastapi.testclient import TestClient
 
 from mood_dj.api.deps import (
     get_current_tokens,
+    get_library_diagnostics_use_case,
     get_library_job_manager,
     get_recommend_job_manager,
     get_session_id,
 )
 from mood_dj.api.main import app
 from mood_dj.application.library_lyrics_status import LibraryLyricsSummary
+from mood_dj.domain.mood_diagnostics import MoodDiagnostics, MoodDiagnosticsReport
 from mood_dj.domain.models import LibraryLyricsRow, LibraryPrepareProgress, LibraryPrepareState, SpotifyTokens
 
 
@@ -203,3 +205,51 @@ def test_lyrics_summary_reports_all_cached() -> None:
 
     assert response.status_code == 200
     assert response.json() == {"all_cached": True}
+
+
+class FakeDiagnosticsUseCase:
+    def __init__(self, report: MoodDiagnosticsReport) -> None:
+        self._report = report
+
+    def run(self, session_id: str) -> MoodDiagnosticsReport:
+        return self._report
+
+
+def test_diagnostics_requires_session() -> None:
+    client = TestClient(app)
+
+    response = client.get("/library/diagnostics")
+
+    assert response.status_code == 401
+
+
+def test_diagnostics_returns_per_mood_stats() -> None:
+    app.dependency_overrides[get_session_id] = lambda: "session-1"
+    report = MoodDiagnosticsReport(
+        moods=(
+            MoodDiagnostics(
+                mood_id="happiness",
+                count=2,
+                mean_confidence=0.8,
+                mean_positive_probability=0.75,
+                mean_entropy=0.5,
+                mean_probabilities={"happiness": 0.8, "love": 0.2},
+            ),
+        ),
+        profiled_count=2,
+        total_tracks=3,
+        unprofiled_share=1 / 3,
+        overall_mean_entropy=0.5,
+    )
+    app.dependency_overrides[get_library_diagnostics_use_case] = lambda: FakeDiagnosticsUseCase(report)
+    client = TestClient(app)
+
+    response = client.get("/library/diagnostics")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["profiled_count"] == 2
+    assert body["total_tracks"] == 3
+    assert body["moods"][0]["mood_id"] == "happiness"
+    assert body["moods"][0]["mean_confidence"] == 0.8
+    assert body["moods"][0]["mean_probabilities"]["love"] == 0.2

@@ -237,32 +237,27 @@ class LibraryLyricsRow:
 class TrackMoodProfile:
     """A per-track mood profile computed from lyrics by `LayaTrackProfiler`.
 
-    `valence`/`arousal` are normalized to [-1, 1]. `polarity_id`/`cluster_id`/
-    `family_id` are the taxonomy node ids chosen by descending the emotion tree
-    (see `mood_dj.domain.taxonomy`); `cluster_id` equals the polarity's implicit
-    single cluster id when that level was skipped (only one child). Tree descent
-    for tracks stops at the family level for performance, so `emotion_id` and
-    `emotion_confidence` are `None` for profiles computed after that change;
-    older cached profiles (a different `version`) may still carry a real
-    `emotion_id` and `emotion_confidence`, kept here for backward compatibility.
-    `situation_id`/`situation_confidence` are `None` for profiles computed since
-    situations were dropped from track-level questions (a track's situation was
-    replaced by a prompt-side situation relatedness bonus computed against the
-    track's family/cluster, see `mood_dj.domain.track_ranking`); older cached
-    profiles (a different `version`) may still carry real values here, kept for
-    backward compatibility. `version` ties the profile to the exact taxonomy +
-    question wording it was computed under, so a taxonomy change invalidates old
-    rows automatically.
+    Flat 7-mood schema (see `mood_dj.domain.moods`): a single `predict_batch`
+    pass answers a flat `mood` choice (one of the 7 moods in `moods.json`) and a
+    binary `polarity` question over the full lyrics text, replacing the earlier
+    deep emotion-tree descent (measurably less accurate for track-level lyrics,
+    see the mood-profiling-accuracy change history). `mood_id` is the argmax of
+    `mood_probabilities` (the router's full probability distribution over all 7
+    moods, keyed by mood id); `mood_confidence` is that same argmax's
+    probability, kept alongside `mood_probabilities` for convenience. Storing
+    the full distribution (not just the top pick) lets ranking give a mixed
+    song (e.g. 50% love / 40% sadness) partial credit against both kinds of
+    prompts, instead of only ever matching its single top mood.
+    `positive_probability` is the probability the lyrics read as emotionally
+    positive overall. `version` ties the profile to the exact moods.json +
+    question wording it was computed under (see
+    `mood_dj.adapters.laya_track_profiler.compute_version`), so any change to
+    either invalidates every cached row automatically.
     """
 
     track_id: str
-    valence: float
-    arousal: float
-    polarity_id: str
-    cluster_id: str
-    family_id: str
+    mood_id: str
+    mood_confidence: float
+    positive_probability: float
     version: str
-    emotion_id: str | None = None
-    emotion_confidence: float | None = None
-    situation_id: str | None = None
-    situation_confidence: float | None = None
+    mood_probabilities: dict[str, float] = field(default_factory=dict)

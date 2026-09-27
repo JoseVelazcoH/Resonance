@@ -4,23 +4,42 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from mood_dj.api.deps import get_current_tokens, get_playlists_client, get_recommend_job_manager, get_session_id
+from mood_dj.adapters.playlist_allowlist import filter_playlists_by_allowlist, load_playlist_allowlist
+from mood_dj.api.deps import (
+    get_current_tokens,
+    get_playlists_client,
+    get_recommend_job_manager,
+    get_session_id,
+    get_settings,
+)
 from mood_dj.api.schemas import (
+    DecisionsResponse,
     DetectedEmotionResponse,
+    DetectedMoodResponse,
     DetectedResponse,
     DetectedSituationResponse,
     DetectedTargetResponse,
     ExcludedResponse,
+    LibraryTrackResponse,
+    PlaylistContributionResponse,
     PlaylistRecommendResponse,
     PlaylistStageResponse,
     PlaylistSummaryResponse,
     PlaylistTrackResponse,
+    RankedTrackResponse,
     RecommendJobStatusResponse,
     SavePlaylistRequest,
     SavePlaylistResponse,
 )
-from mood_dj.application.recommend_from_library import PlaylistRecommendation
+from mood_dj.application.recommend_from_library import (
+    DecisionsSnapshot,
+    Detected,
+    LibraryTrackSummary,
+    PlaylistRecommendation,
+)
 from mood_dj.application.recommend_job_manager import RecommendJobManager
+from mood_dj.config import Settings
+from mood_dj.domain.labels import english_emotion_label, english_mood_label, english_situation_label
 from mood_dj.domain.models import SpotifyTokens
 from mood_dj.ports.spotify_playlists import SpotifyApiError, SpotifyPlaylistsClient
 
@@ -30,6 +49,49 @@ SPOTIFY_PERMISSION_ERROR_DETAIL = (
 
 router = APIRouter(prefix="/playlists", tags=["playlists"])
 recommend_jobs_router = APIRouter(prefix="/recommend-jobs", tags=["playlists"])
+
+
+def _detected_to_response(detected: Detected) -> DetectedResponse:
+    # Labels are translated to English at this API boundary via a separate
+    # labels_en.json lookup (see mood_dj.domain.labels), so the UI is always
+    # in English without editing emotions.json/moods.json (which would bump
+    # laya_track_profiler.compute_version and force a full library re-profile).
+    return DetectedResponse(
+        emotion=DetectedEmotionResponse(
+            id=detected.emotion.id,
+            label=english_emotion_label(detected.emotion.id, detected.emotion.label),
+            confidence=detected.emotion.confidence,
+        ),
+        family_id=detected.family_id,
+        situation=DetectedSituationResponse(
+            id=detected.situation.id,
+            label=english_situation_label(detected.situation.id, detected.situation.label),
+            confidence=detected.situation.confidence,
+        ),
+        target=DetectedTargetResponse(
+            valence=detected.target.valence,
+            arousal=detected.target.arousal,
+        ),
+        mood=DetectedMoodResponse(
+            id=detected.mood.id,
+            label=english_mood_label(detected.mood.id, detected.mood.label),
+        ),
+    )
+
+
+def _library_tracks_to_response(tracks: list[LibraryTrackSummary]) -> list[LibraryTrackResponse]:
+    return [
+        LibraryTrackResponse(id=track.id, name=track.name, artist=track.artist, cover_url=track.cover_url)
+        for track in tracks
+    ]
+
+
+def _decisions_to_response(decisions: DecisionsSnapshot) -> DecisionsResponse:
+    return DecisionsResponse(
+        strategy=decisions.strategy.value,
+        signals=decisions.signal_probabilities,
+        detected=_detected_to_response(decisions.detected),
+    )
 
 
 def _to_response(recommendation: PlaylistRecommendation) -> PlaylistRecommendResponse:
@@ -45,6 +107,7 @@ def _to_response(recommendation: PlaylistRecommendation) -> PlaylistRecommendRes
                         name=ranked.track.name,
                         artist=ranked.track.artist,
                         album=ranked.track.album,
+                        duration_s=ranked.track.duration_s,
                         cover_url=ranked.track.cover_url,
                         external_url=ranked.track.external_url,
                         keep_probability=ranked.similarity,
@@ -54,23 +117,7 @@ def _to_response(recommendation: PlaylistRecommendation) -> PlaylistRecommendRes
             )
             for stage in recommendation.stages
         ],
-        detected=DetectedResponse(
-            emotion=DetectedEmotionResponse(
-                id=recommendation.detected.emotion.id,
-                label=recommendation.detected.emotion.label,
-                confidence=recommendation.detected.emotion.confidence,
-            ),
-            family_id=recommendation.detected.family_id,
-            situation=DetectedSituationResponse(
-                id=recommendation.detected.situation.id,
-                label=recommendation.detected.situation.label,
-                confidence=recommendation.detected.situation.confidence,
-            ),
-            target=DetectedTargetResponse(
-                valence=recommendation.detected.target.valence,
-                arousal=recommendation.detected.target.arousal,
-            ),
-        ),
+        detected=_detected_to_response(recommendation.detected),
         excluded=ExcludedResponse(
             no_lyrics=recommendation.excluded_no_lyrics,
             instrumental=recommendation.excluded_instrumental,
@@ -78,6 +125,27 @@ def _to_response(recommendation: PlaylistRecommendation) -> PlaylistRecommendRes
         ),
         qualifying_count=recommendation.qualifying_count,
         threshold=recommendation.threshold,
+        playlist_contributions=[
+            PlaylistContributionResponse(
+                playlist_id=contribution.playlist_id,
+                name=contribution.name,
+                image_url=contribution.image_url,
+                track_count=contribution.track_count,
+                contributed=contribution.contributed,
+            )
+            for contribution in recommendation.playlist_contributions
+        ],
+        ranked_tracks=[
+            RankedTrackResponse(
+                id=ranked.id,
+                name=ranked.name,
+                artist=ranked.artist,
+                cover_url=ranked.cover_url,
+                similarity=ranked.similarity,
+                selected=ranked.selected,
+            )
+            for ranked in recommendation.ranked_tracks
+        ],
     )
 
 
@@ -85,8 +153,11 @@ def _to_response(recommendation: PlaylistRecommendation) -> PlaylistRecommendRes
 def list_playlists(
     tokens: SpotifyTokens = Depends(get_current_tokens),
     playlists_client: SpotifyPlaylistsClient = Depends(get_playlists_client),
+    settings: Settings = Depends(get_settings),
 ):
     playlists = playlists_client.list_playlists(tokens.access_token)
+    allowlist_names = load_playlist_allowlist(settings.playlist_allowlist_file)
+    playlists, _not_found = filter_playlists_by_allowlist(playlists, allowlist_names)
     return [
         PlaylistSummaryResponse(
             id=p.id, name=p.name, image_url=p.image_url, track_count=p.track_count, snapshot_id=p.snapshot_id
@@ -131,4 +202,6 @@ def recommend_job_status(
         total=job.total,
         result=_to_response(job.result) if job.result is not None else None,
         error=job.error,
+        decisions=_decisions_to_response(job.decisions) if job.decisions is not None else None,
+        library_tracks=_library_tracks_to_response(job.library_tracks) if job.library_tracks is not None else None,
     )

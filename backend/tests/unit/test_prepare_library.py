@@ -390,3 +390,73 @@ def test_fetch_lyrics_worker_threads_are_daemon_threads() -> None:
 
     assert seen_daemon_flags
     assert all(seen_daemon_flags)
+
+
+# -- missing-lyrics retry TTL (item 6a) --------------------------------------
+
+
+def test_stale_missing_entry_is_retried_after_the_ttl() -> None:
+    from datetime import datetime, timedelta, timezone
+
+    fetched_at = datetime(2020, 1, 1, tzinfo=timezone.utc)
+    now = fetched_at + timedelta(days=31)
+
+    playlists = [_summary("p1", "s1")]
+    tracks_by_playlist = {"p1": [_track("t1")]}
+    client = FakePlaylistsClient(playlists, tracks_by_playlist)
+    repo = FakeLyricsRepository(
+        existing={"t1": LyricsEntry("t1", LyricsStatus.MISSING, None, fetched_at.isoformat())}
+    )
+    provider = FakeLyricsProvider({"t1": LyricsLookupResult(LyricsStatus.LYRICS, "found now")})
+    use_case = _use_case(
+        client, repo, provider,
+        lyrics_missing_retry_days=30,
+        wall_clock_now_fn=lambda: now,
+    )
+
+    progress = use_case.run("session-1", "token")
+
+    assert provider.calls == ["t1"]
+    assert progress.with_lyrics == 1
+    assert repo.get("t1").status is LyricsStatus.LYRICS
+    assert repo.get("t1").text == "found now"
+
+
+def test_fresh_missing_entry_is_not_retried_before_the_ttl() -> None:
+    from datetime import datetime, timedelta, timezone
+
+    fetched_at = datetime(2020, 1, 1, tzinfo=timezone.utc)
+    now = fetched_at + timedelta(days=10)
+
+    playlists = [_summary("p1", "s1")]
+    tracks_by_playlist = {"p1": [_track("t1")]}
+    client = FakePlaylistsClient(playlists, tracks_by_playlist)
+    repo = FakeLyricsRepository(
+        existing={"t1": LyricsEntry("t1", LyricsStatus.MISSING, None, fetched_at.isoformat())}
+    )
+    provider = FakeLyricsProvider({})
+    use_case = _use_case(
+        client, repo, provider,
+        lyrics_missing_retry_days=30,
+        wall_clock_now_fn=lambda: now,
+    )
+
+    progress = use_case.run("session-1", "token")
+
+    assert provider.calls == []
+    assert progress.missing == 1
+    assert repo.get("t1").status is LyricsStatus.MISSING
+
+
+def test_malformed_fetched_at_is_treated_as_not_eligible_for_retry() -> None:
+    playlists = [_summary("p1", "s1")]
+    tracks_by_playlist = {"p1": [_track("t1")]}
+    client = FakePlaylistsClient(playlists, tracks_by_playlist)
+    repo = FakeLyricsRepository(existing={"t1": LyricsEntry("t1", LyricsStatus.MISSING, None, "not-a-date")})
+    provider = FakeLyricsProvider({})
+    use_case = _use_case(client, repo, provider, lyrics_missing_retry_days=30)
+
+    progress = use_case.run("session-1", "token")
+
+    assert provider.calls == []
+    assert progress.missing == 1

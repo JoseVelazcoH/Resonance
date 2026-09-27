@@ -23,7 +23,15 @@ confidence picks, which `blend_target` naturally down-weights.
 from __future__ import annotations
 
 from mood_dj.domain.playlist_strategy import PlaylistSignals, resolve_playlist_strategy
-from mood_dj.domain.prompt_profile import EmotionPick, PromptProfile, SituationPick, blend_target
+from mood_dj.domain.moods import MoodCatalog, load_moods
+from mood_dj.domain.prompt_profile import (
+    DIRECT_SCORE_WEIGHT,
+    EmotionPick,
+    MoodPick,
+    PromptProfile,
+    SituationPick,
+    blend_target,
+)
 from mood_dj.domain.taxonomy import (
     EmotionTree,
     SituationCatalog,
@@ -93,7 +101,8 @@ def _polarity_question(tree: EmotionTree) -> dict:
         "type": "choice",
         "instructions": "Which emotional polarity best matches what the listener is asking for?",
         "criteria": {
-            polarity.id: f"The prompt expresses a mostly {polarity.id} emotional polarity."
+            polarity.id: polarity.description
+            or f"The prompt expresses a mostly {polarity.id} emotional polarity."
             for polarity in tree.polarities
         },
     }
@@ -130,6 +139,9 @@ class LayaPromptProfiler:
         router=None,
         tree: EmotionTree | None = None,
         situations: SituationCatalog | None = None,
+        moods: MoodCatalog | None = None,
+        beam_margin: float | None = None,
+        direct_score_weight: float = DIRECT_SCORE_WEIGHT,
     ) -> None:
         if router is None:
             from laya import Router
@@ -138,6 +150,15 @@ class LayaPromptProfiler:
         self._router = router
         self._tree = tree if tree is not None else load_emotion_tree()
         self._situations = situations if situations is not None else load_situations()
+        self._moods = moods if moods is not None else load_moods()
+        # When set, a top-2 polarity margin below this threshold triggers a beam:
+        # both candidate polarities are descended and the one with the higher
+        # product of tree-descent confidences wins. `None` (default) keeps the
+        # original greedy behavior (always take the single top polarity), so
+        # this is purely additive and opt-in -- see `scripts/eval_mood.py` for
+        # the eval harness flag that turns it on.
+        self._beam_margin = beam_margin
+        self._direct_score_weight = direct_score_weight
 
     def profile(self, prompt: str) -> PromptProfile:
         situation_groups = list(self._situations.groups)
@@ -177,15 +198,17 @@ class LayaPromptProfiler:
         direct_valence = _score_to_unit_interval(float(answers["valence"]["score"]), len(VALENCE_LEVELS))
         direct_arousal = _score_to_unit_interval(float(answers["arousal"]["score"]), len(AROUSAL_LEVELS))
 
-        polarity_id = answers["polarity"]["choice"]
         situation_id, situation_confidence = self._pick_higher_confidence(
             answers["situation_a"], answers["situation_b"]
         )
         situation = self._resolve_situation(situation_id, situation_confidence)
 
-        emotion = self._descend_emotion(prompt, polarity_id)
+        emotion = self._pick_emotion(prompt, answers["polarity"])
+        mood = self._resolve_mood(emotion.family_id)
 
-        target_valence, target_arousal = blend_target(direct_valence, direct_arousal, emotion, situation)
+        target_valence, target_arousal = blend_target(
+            direct_valence, direct_arousal, emotion, situation, direct_weight=self._direct_score_weight
+        )
 
         return PromptProfile(
             signals=signals,
@@ -195,7 +218,17 @@ class LayaPromptProfiler:
             target_arousal=target_arousal,
             emotion=emotion,
             situation=situation,
+            direct_valence=direct_valence,
+            direct_arousal=direct_arousal,
+            mood=mood,
         )
+
+    def _resolve_mood(self, family_id: str) -> MoodPick:
+        mood_id = self._moods.family_to_mood_id(family_id)
+        if mood_id is None:
+            return MoodPick(id="", label="")
+        mood = self._moods.by_id(mood_id)
+        return MoodPick(id=mood.id, label=mood.label)
 
     def _pick_higher_confidence(self, answer_a: dict, answer_b: dict) -> tuple[str, float]:
         choice_a = answer_a["choice"]
@@ -220,7 +253,41 @@ class LayaPromptProfiler:
                 )
         raise KeyError(f"Unknown situation id: {situation_id!r}")
 
-    def _descend_emotion(self, prompt: str, polarity_id: str) -> EmotionPick:
+    def _pick_emotion(self, prompt: str, polarity_answer: dict) -> EmotionPick:
+        """Resolve the top-level polarity choice into a full `EmotionPick`.
+
+        With `beam_margin` unset (default), this is a pure greedy descent from
+        the router's top polarity choice, same as before beam support existed.
+        With `beam_margin` set, a top-2 polarity margin under the threshold
+        triggers a beam: both candidate polarities are descended and the path
+        with the higher product of (polarity_confidence * cluster_confidence *
+        family_confidence * emotion_confidence) is kept. This is the fix for
+        the "Estoy enamorado" bug: polarity ambivalent (0.53) vs positive
+        (0.43) is a near coin flip, so greedily trusting "ambivalent" throws
+        away the "positive" branch where "Amor"/love_affection actually lives.
+        """
+
+        probabilities = polarity_answer["probabilities"]
+        ranked = sorted(probabilities.items(), key=lambda kv: kv[1], reverse=True)
+        top_id, top_confidence = ranked[0]
+
+        if self._beam_margin is None or len(ranked) < 2:
+            emotion, _path_probability = self._descend_emotion(prompt, top_id)
+            return emotion
+
+        second_id, second_confidence = ranked[1]
+        margin = top_confidence - second_confidence
+        if margin >= self._beam_margin:
+            emotion, _path_probability = self._descend_emotion(prompt, top_id)
+            return emotion
+
+        emotion_a, path_a = self._descend_emotion(prompt, top_id)
+        emotion_b, path_b = self._descend_emotion(prompt, second_id)
+        score_a = top_confidence * path_a
+        score_b = second_confidence * path_b
+        return emotion_a if score_a >= score_b else emotion_b
+
+    def _descend_emotion(self, prompt: str, polarity_id: str) -> tuple[EmotionPick, float]:
         polarity = self._find_polarity(polarity_id)
 
         clusters = list_children(polarity)
@@ -269,21 +336,25 @@ class LayaPromptProfiler:
             emotion = self._find_emotion_in_family(family, answer["choice"])
             emotion_confidence = float(answer["probabilities"][answer["choice"]])
 
-        # `cluster_confidence`/`family_confidence` are computed for symmetry with
-        # the track profiler's tree descent but are not carried on `EmotionPick`;
-        # only the finest (emotion) level confidence is used downstream, since that
-        # is the node whose exact coordinates feed `blend_target`.
-        del cluster_confidence, family_confidence
+        # `cluster_confidence`/`family_confidence` are not carried on `EmotionPick`
+        # (only the finest, emotion-level confidence feeds `blend_target`), but
+        # their product with `emotion_confidence` is returned as the path
+        # probability so `_pick_emotion`'s beam can compare full descent paths
+        # across two candidate polarities.
+        path_probability = cluster_confidence * family_confidence * emotion_confidence
 
-        return EmotionPick(
-            id=emotion.id,
-            label=emotion.label,
-            confidence=emotion_confidence,
-            family_id=family.id,
-            cluster_id=cluster.id,
-            polarity_id=polarity.id,
-            valence=emotion.valence,
-            arousal=emotion.arousal,
+        return (
+            EmotionPick(
+                id=emotion.id,
+                label=emotion.label,
+                confidence=emotion_confidence,
+                family_id=family.id,
+                cluster_id=cluster.id,
+                polarity_id=polarity.id,
+                valence=emotion.valence,
+                arousal=emotion.arousal,
+            ),
+            path_probability,
         )
 
     def _find_polarity(self, polarity_id: str):

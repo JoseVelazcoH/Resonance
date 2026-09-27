@@ -14,7 +14,7 @@ DEFAULT_FRONTEND_URL = "http://127.0.0.1:5173"
 DEFAULT_SPOTIFY_REDIRECT_URI = "http://127.0.0.1:8000/auth/callback"
 DEFAULT_PLAYLIST_ALLOWLIST_FILE = "playlists.local.json"
 SESSION_COOKIE_NAME = "session_id"
-DEFAULT_TRACK_LYRICS_CHAR_BUDGET = 500
+DEFAULT_LYRICS_MISSING_RETRY_DAYS = 30
 
 # The backend package root (this file's directory's parent), used to resolve
 # PLAYLIST_ALLOWLIST_FILE relative to `backend/` regardless of the process cwd.
@@ -30,7 +30,7 @@ class Settings:
     frontend_url: str
     spotify_redirect_uri: str
     playlist_allowlist_file: str = DEFAULT_PLAYLIST_ALLOWLIST_FILE
-    track_lyrics_char_budget: int = DEFAULT_TRACK_LYRICS_CHAR_BUDGET
+    lyrics_missing_retry_days: int = DEFAULT_LYRICS_MISSING_RETRY_DAYS
 
 
 def load_settings() -> Settings:
@@ -45,8 +45,8 @@ def load_settings() -> Settings:
         frontend_url=os.environ.get("FRONTEND_URL", DEFAULT_FRONTEND_URL),
         spotify_redirect_uri=os.environ.get("SPOTIFY_REDIRECT_URI", DEFAULT_SPOTIFY_REDIRECT_URI),
         playlist_allowlist_file=allowlist_path,
-        track_lyrics_char_budget=int(
-            os.environ.get("TRACK_LYRICS_CHAR_BUDGET", str(DEFAULT_TRACK_LYRICS_CHAR_BUDGET))
+        lyrics_missing_retry_days=int(
+            os.environ.get("LYRICS_MISSING_RETRY_DAYS", str(DEFAULT_LYRICS_MISSING_RETRY_DAYS))
         ),
     )
 

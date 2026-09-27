@@ -17,3 +17,7 @@ class MoodProfileRepository(Protocol):
     def save(self, profile: TrackMoodProfile) -> None:
         """Persist (insert or replace) a mood profile."""
         ...
+
+    def get_all(self, version: str) -> list[TrackMoodProfile]:
+        """Return every cached profile at exactly this version. Read-only, for diagnostics."""
+        ...
