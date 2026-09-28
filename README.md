@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/resonance-banner.png" width="720" alt="Resonance" />
+  <img src="assets/resonance-banner.png"  alt="Resonance" />
 </p>
 
 # Resonance
@@ -13,8 +13,8 @@
 
 <div align="center">
 
-  <img src="https://img.shields.io/badge/Status-Proof%20of%20Concept-1DB954?style=for-the-badge&labelColor=0A0A0A" alt="Status" />
-  <img src="https://img.shields.io/badge/Stack-Python%20%7C%20FastAPI%20%7C%20React%20%7C%20Laya-1DB954?style=for-the-badge&labelColor=0A0A0A" alt="Stack" />
+  <img src="https://img.shields.io/badge/Type-Self%20Hosted-1DB954?style=for-the-badge&labelColor=0A0A0A" alt="Type" />
+  <img src="https://img.shields.io/badge/Stack-Python%20%7C%20FastAPI%20%7C%20Laya-1DB954?style=for-the-badge&labelColor=0A0A0A" alt="Stack" />
   <img src="https://img.shields.io/badge/Requires-Spotify%20Premium-1DB954?style=for-the-badge&labelColor=0A0A0A" alt="Requires Spotify Premium" />
   <img src="https://img.shields.io/badge/License-GPL--3.0-1DB954?style=for-the-badge&labelColor=0A0A0A" alt="License" />
 
