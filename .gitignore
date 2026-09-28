@@ -17,3 +17,5 @@ dist/
 
 # Local-only config (personal playlist allowlists, etc.)
 *.local.json
+*.local.csv
+*.local.html
