@@ -16,6 +16,7 @@
   <img src="https://img.shields.io/badge/Status-Proof%20of%20Concept-1DB954?style=for-the-badge&labelColor=0A0A0A" alt="Status" />
   <img src="https://img.shields.io/badge/Stack-Python%20%7C%20FastAPI%20%7C%20React%20%7C%20Laya-1DB954?style=for-the-badge&labelColor=0A0A0A" alt="Stack" />
   <img src="https://img.shields.io/badge/Requires-Spotify%20Premium-1DB954?style=for-the-badge&labelColor=0A0A0A" alt="Requires Spotify Premium" />
+  <img src="https://img.shields.io/badge/License-GPL--3.0-1DB954?style=for-the-badge&labelColor=0A0A0A" alt="License" />
 
 </div>
 
@@ -120,19 +121,14 @@ A hexagonal Python backend and a small React app. The only model in the loop is 
 
 ### Run it
 
-1. **Backend:** copy the env file, fill in `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET`, then start the API.
+1. **Install:** creates `backend/.env` and `frontend/.env`, then installs dependencies (`uv sync`, `npm install`). Fill in `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` in `backend/.env`.
    ```bash
-   cd backend
-   cp .env.example .env
-   uv sync
-   uv run uvicorn mood_dj.api.main:app --host 127.0.0.1 --port 8000
+   make install
    ```
-2. **Frontend:** in a second terminal.
+   The backend pulls PyTorch through `laya`, so the first install takes a few minutes. Laya's weights download from Hugging Face on first use. No GPU needed.
+2. **Run:** starts the API and the web app together.
    ```bash
-   cd frontend
-   cp .env.example .env
-   npm install
-   npm run dev
+   make dev
    ```
 3. **Open** [http://127.0.0.1:5173](http://127.0.0.1:5173) and connect Spotify. Use `127.0.0.1`, not `localhost`: the session cookie and the Spotify redirect are bound to it.
 
@@ -151,10 +147,11 @@ Delete the file to use every playlist you own or collaborate on.
 ### Tests
 
 ```bash
-cd backend
-uv run pytest            # unit tests, no network, no model
-uv run pytest -m laya    # integration tests against the real Laya model
+make test        # unit tests, no network, no model
+make test-laya   # integration tests against the real Laya model
 ```
+
+Run `make` to list every command.
 
 <br>
 
@@ -183,3 +180,7 @@ uv run pytest -m laya    # integration tests against the real Laya model
 > [!IMPORTANT]
 > The first run can take several minutes. Resonance downloads the lyrics of every song in your library and reads their mood with Laya on your CPU. Everything is cached in SQLite, so later runs only process new songs.
 
+<br>
+
+## <img src="https://api.iconify.design/lucide/scale.svg?color=%231DB954" width="20" height="20">&nbsp; License
+Released under the [GPL-3.0](LICENSE) license.
