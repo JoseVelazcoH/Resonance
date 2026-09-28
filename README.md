@@ -68,6 +68,13 @@ Resonance treats it as a **decision problem**, not a recommendation problem. The
 
 <br>
 
+## <img src="https://api.iconify.design/lucide/clapperboard.svg?color=%231DB954" width="20" height="20">&nbsp; Demo
+<p align="center">
+  <img src="assets/demo.gif" width="100%" alt="Resonance demo" />
+</p>
+
+<br>
+
 ## <img src="https://api.iconify.design/lucide/flask-conical.svg?color=%231DB954" width="20" height="20">&nbsp; What We Measured
 
 Song mood from lyrics is hard, so every design choice was tested on a labeled set before shipping.
