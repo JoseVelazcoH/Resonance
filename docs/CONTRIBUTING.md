@@ -15,8 +15,8 @@ React frontend (Vite, npm). You also need a Spotify Premium account and a Spotif
 described in the [README](../README.md#getting-started).
 
 ```sh
-git clone https://github.com/JoseVelazcoH/System-one-agent-spotify-mood-dj.git
-cd System-one-agent-spotify-mood-dj
+git clone https://github.com/JoseVelazcoH/Resonance.git
+cd Resonance
 make install    # creates the .env files and installs dependencies
 make dev        # runs the API and the web app
 make            # lists every command
