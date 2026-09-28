@@ -182,5 +182,13 @@ Run `make` to list every command.
 
 <br>
 
+## <img src="https://api.iconify.design/lucide/book-open.svg?color=%231DB954" width="20" height="20">&nbsp; Community
+- [Contributing](docs/CONTRIBUTING.md)
+- [Commit convention](docs/commits-convention.md)
+- [Code of conduct](docs/CODE_OF_CONDUCT.md)
+- [Security policy](docs/SECURITY.md)
+
+<br>
+
 ## <img src="https://api.iconify.design/lucide/scale.svg?color=%231DB954" width="20" height="20">&nbsp; License
 Released under the [GPL-3.0](LICENSE) license.
