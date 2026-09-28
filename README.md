@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/resonance-banner.png" width="720" alt="Resonance" />
+</p>
+
 # Resonance
 
 <p align="center">
@@ -49,12 +53,16 @@ Mood playlists exist, but they are built from someone else's catalog, and the si
 Resonance treats it as a **decision problem**, not a recommendation problem. The mood of each song is read once from its **lyrics** and cached. Your prompt is interpreted at request time by [Laya](https://huggingface.co/convaiinnovations/laya), a non-autoregressive decision model that answers typed questions with calibrated probabilities. Ranking is plain math over those cached decisions, so a new prompt takes seconds instead of re-reading your whole library.
 
 ### How it works
+<p align="center">
+  <img src="assets/resonance-architecture.png" width="100%" alt="Architecture Diagram" />
+</p>
+
 
 1.  **Library:** you sign in with Spotify. Resonance reads your own and collaborative playlists and merges their tracks without duplicates. Playlists it created itself are always skipped.
 2.  **Lyrics:** each track's lyrics are fetched from [LRCLIB](https://lrclib.net) and stored in SQLite, with retries and backoff when the service is busy. This happens once per track.
 3.  **Song mood:** Laya reads the full lyrics and answers two questions: which of 7 moods fits (love, happiness, comfort, sadness, loneliness, anger, fear) and whether the song is positive or negative. The full probability distribution is cached per track.
 4.  **Your mood:** Laya reads your prompt and decides the signals (feels down, wants a change, wants energy, wants rest), the emotion, the situation and the strategy: *keep me company*, *lift me up*, *energize* or *calm*.
-5.  **Playlist:** every song is scored against your target. Only songs at **65% match or higher** make it in. *Lift me up* builds a progression from melancholic to hopeful to positive.
+5.  **Playlist:** every song is checked against your target mood with a per-mood probability threshold, fitted on 300 user-labeled tracks (love 72%, happiness 8%, comfort 18%, sadness 14%, loneliness 16%, anger 50%; fear has no reliable threshold and instead requires the song's top mood to be fear). Qualifying songs are ordered by that probability, highest first. *Lift me up* builds a three-step progression, each step targeting a different mood (your detected mood, then comfort, then happiness).
 
 > Laya never picks songs directly. It interprets text into structured decisions, and those decisions choose the songs. Every step shown on screen is a real model output.
 
@@ -62,15 +70,20 @@ Resonance treats it as a **decision problem**, not a recommendation problem. The
 
 ## <img src="https://api.iconify.design/lucide/flask-conical.svg?color=%231DB954" width="20" height="20">&nbsp; What We Measured
 
-Song mood from lyrics is hard, so every design choice was tested on a small labeled set before shipping.
+Song mood from lyrics is hard, so every design choice was tested on a labeled set before shipping.
 
-| **Setup**                                         | **Positive vs negative** | **7 moods**  |
-| :------------------------------------------------ | :----------------------: | :----------: |
-| 4-level emotion tree, 500-char excerpt            | 45%                      | 25% (family) |
-| Flat moods, 500-char excerpt                      | 60%                      | 27-33%       |
-| **Flat moods, full lyrics, plain text (shipped)** | **83%**                  | **50%**      |
+| **Measure**                                   | **Resonance**      | **Reference**                   |
+| :-------------------------------------------- | :----------------: | :------------------------------ |
+| 7-mood choice, strict (300 user-labeled)      | 31%                |                                 |
+| 7-mood choice, lenient (adjacent mood counts) | 55%                |                                 |
+| Positive vs negative (300 user-labeled)       | 45-52%             | 50% (chance)                    |
+| Playlist precision, held-out split            | 48%                | 32% (random selection)          |
+| Playlist recall, held-out split               | 33%                |                                 |
+| [MERGE lyrics benchmark](https://arxiv.org/abs/2407.06060), 4 quadrants | 57.5% (macro-F1 0.57) | 0.71-0.75 macro-F1 (trained models) |
 
-Sending the full lyrics mattered more than any other change. The set is small (30 songs, AI-labeled), so treat these numbers as direction, not a benchmark. `scripts/eval_mood.py` re-runs the evaluation against your own labels.
+On MERGE, the 7 moods are mapped onto the same 4 circumplex quadrants used there; the reference models were trained directly on that benchmark, Laya was not.
+
+Because the model's polarity read and single argmax mood aren't reliable enough on their own, playlist selection instead uses the full per-mood probability distribution against per-mood thresholds fitted on that 300-track set (precision-first: maximize F0.5 subject to precision beating a random baseline by at least 0.15 and recall staying at or above 0.20). Measured on a held-out split, that reaches 48% average precision against a 32% random baseline, at 33% average recall. `scripts/eval_mood.py` re-runs the evaluation against your own labels.
 
 <br>
 
@@ -143,7 +156,7 @@ uv run pytest -m laya    # integration tests against the real Laya model
 - [x] **Lyrics cache** from LRCLIB with retries, backoff and resumable downloads
 - [x] **Song mood profiles** with a full 7-mood distribution per track
 - [x] **Prompt decisions** for signals, emotion, situation and strategy
-- [x] **65% match threshold** and a *lift me up* progression
+- [x] **Per-mood thresholds** and a *lift me up* progression
 - [x] **Animated analysis** that reveals chosen and rejected songs
 - [x] **Full-track player** and **Save to Spotify**
 - [ ] **Human-labeled evaluation set** in Spanish and English
@@ -157,18 +170,9 @@ uv run pytest -m laya    # integration tests against the real Laya model
 - [Laya](https://huggingface.co/convaiinnovations/laya) by Convai Innovations: the decision model behind every choice
 - [LRCLIB](https://lrclib.net): open lyrics that make this possible without scraping
 - [Spotify Web API and Web Playback SDK](https://developer.spotify.com/documentation): playlists, saving and playback
-- [Bridge](https://github.com/Bonevane/Bridge#readme): for the README style
 
 <br>
 
 > [!IMPORTANT]
 > The first run can take several minutes. Resonance downloads the lyrics of every song in your library and reads their mood with Laya on your CPU. Everything is cached in SQLite, so later runs only process new songs.
-
-<br>
-
-<div align="center">
-
-[![GitHub](https://img.shields.io/badge/GitHub-181717?style=flat&logo=github&logoColor=white)](https://github.com/JoseVelazcoH)
-
-</div>
 
