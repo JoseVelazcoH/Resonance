@@ -1,0 +1,21 @@
+{
+  "_meta": {
+    "method": "Precision-first per-mood track selection policy, replacing the earlier weighted-similarity ranking (mood match + proximity + polarity + situation) and its single MATCH_THRESHOLD. Fitted on a DEV set of 300 user-labeled tracks: a track qualifies for target mood m when p(m) (from TrackMoodProfile.mood_probabilities) is at or above threshold[m]. Selection rule per mood: precision >= random-baseline precision + 0.15 and recall >= 0.20, maximizing F0.5. Measured on a held-out TEST split: average precision 48% vs. a 32% random baseline, average recall 33%. `fear` has no threshold that clears this bar on either split, so it falls back to a top-1 rule instead: a track qualifies for fear only when fear is its argmax mood (TrackMoodProfile.mood_id), never by a probability threshold.",
+    "fitted_on": "DEV split, 300 user-labeled tracks",
+    "measured_on": "held-out TEST split",
+    "selection_rule": "precision >= random + 0.15 and recall >= 0.20, maximize F0.5",
+    "test_precision_avg": 0.48,
+    "test_recall_avg": 0.33,
+    "random_baseline_precision": 0.32,
+    "unsupported_moods": ["fear"]
+  },
+  "thresholds": {
+    "love": 0.72,
+    "happiness": 0.08,
+    "comfort": 0.18,
+    "sadness": 0.14,
+    "loneliness": 0.16,
+    "anger": 0.50,
+    "fear": null
+  }
+}

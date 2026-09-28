@@ -88,7 +88,7 @@ export function PlaylistScreen({
 
   const singleStage = stages.length === 1;
   const eyebrow = singleStage ? `Stage 1: ${stages[0].name}` : `${stages.length} Stages`;
-  const thresholdPercent = Math.round(result.threshold * 100);
+  const thresholdPercent = result.threshold !== null ? Math.round(result.threshold * 100) : null;
   const hasQualifyingTracks = result.qualifying_count > 0;
   const trackIds = useMemo(() => stages.flatMap((stage) => stage.tracks.map((track) => track.id)), [stages]);
 
@@ -221,7 +221,8 @@ export function PlaylistScreen({
         {!hasQualifyingTracks && (
           <div className="no-matches-message">
             <p className="no-matches-title">
-              Only {result.qualifying_count} songs matched at {thresholdPercent}% or more
+              Only {result.qualifying_count} songs matched
+              {thresholdPercent !== null ? ` at ${thresholdPercent}% or more` : ""}
             </p>
             <button type="button" className="regenerate-button" onClick={onTryAnotherMood}>
               Try another mood

@@ -21,7 +21,7 @@ from mood_dj.domain.playlist_strategy import PlaylistSignals
 # a confident one.
 #
 # The direct score comes from the same miscalibrated question type used for
-# per-track valence/arousal (see `mood_dj.domain.track_ranking`), so its weight
+# per-track valence/arousal (see `mood_dj.domain.mood_selection_policy`), so its weight
 # is reduced below the emotion/situation picks' typical confidence: the emotion
 # family and situation coordinates (hand-placed circumplex centroids) are a
 # more trustworthy signal than the model's raw direct score. Lowered from 1.0
@@ -60,7 +60,7 @@ class MoodPick:
     """The flat mood (see `mood_dj.domain.moods`) the prompt's emotion family maps to.
 
     Bridges the prompt side's deep emotion-tree pick into the same flat
-    mood space `TrackMoodProfile` lives in, so ranking (`mood_dj.domain.track_ranking`)
+    mood space `TrackMoodProfile` lives in, so ranking (`mood_dj.domain.mood_selection_policy`)
     can compare a prompt's target directly against a track's mood distribution.
     """
 
@@ -74,7 +74,7 @@ class PromptProfile:
 
     `direct_valence`/`direct_arousal` are the raw, unblended direct-score
     question answers (the same miscalibrated question type used per-track, see
-    `mood_dj.domain.track_ranking`), kept here purely for diagnostics/bias
+    `mood_dj.domain.mood_selection_policy`), kept here purely for diagnostics/bias
     inspection; ranking and `blend_target` only ever use `target_valence`/
     `target_arousal`.
     """

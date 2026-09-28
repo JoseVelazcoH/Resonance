@@ -1,13 +1,15 @@
-"""Use case: rank a session's cached per-track mood profiles against a prompt's target.
+"""Use case: select a session's cached per-track mood profiles against a prompt's target.
 
 Slice C design: the listener's prompt is analyzed once, on its own, into a
-target mood point (`PromptProfiler`). Every library track that already has a
-cached `TrackMoodProfile` (computed once, ahead of time, during library
-preparation) is then ranked against that target with a pure, fast similarity
-function (`mood_dj.domain.track_ranking.similarity`) -- no further model calls
-happen per track. Tracks without lyrics, instrumental tracks, and tracks whose
-lyrics have not been profiled yet (or were profiled under a stale taxonomy
-version) are excluded and counted.
+target mood (`PromptProfiler`). Every library track that already has a cached
+`TrackMoodProfile` (computed once, ahead of time, during library preparation)
+is then checked against that target mood with a precision-first, per-mood
+selection policy (`mood_dj.domain.mood_selection_policy`) -- no further model
+calls happen per track. A track qualifies when its cached probability for the
+target mood clears that mood's threshold (or, for `fear`, when it is the
+track's top-1 mood). Tracks without lyrics, instrumental tracks, and tracks
+whose lyrics have not been profiled yet (or were profiled under a stale
+taxonomy version) are excluded and counted.
 """
 
 from __future__ import annotations
@@ -19,15 +21,15 @@ from enum import Enum
 from typing import Callable
 
 from mood_dj.application.library_store import LibraryStore
+from mood_dj.domain.mood_selection_policy import MoodSelectionPolicy, keep_probability, load_selection_policy, qualifies
 from mood_dj.domain.models import LyricsStatus, PlaylistTrack, Strategy, TrackMoodProfile
-from mood_dj.domain.moods import MoodCatalog, load_moods
+from mood_dj.domain.moods import load_moods
 from mood_dj.domain.taxonomy import (
     iter_all_situations,
     load_emotion_tree,
     load_situations,
     related_families_and_clusters,
 )
-from mood_dj.domain.track_ranking import TargetProfile, similarity
 from mood_dj.ports.lyrics_repository import LyricsRepository
 from mood_dj.ports.mood_profile_repository import MoodProfileRepository
 from mood_dj.ports.prompt_profiler import PromptProfiler
@@ -36,17 +38,21 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_TRACKS = 30
 
-# A track's similarity to the target must clear this to ever appear in a built
-# playlist.
-MATCH_THRESHOLD = 0.65
-
 LIFT_STAGE_NAMES = ["melancholic", "hopeful", "positive"]
 SINGLE_STAGE_NAME = "session"
 
-# Lift shifts the target valence across three stages (sad -> hopeful -> positive)
-# so each stage's ranking favors a different tone, without ever repeating a
-# track already used by an earlier stage.
-LIFT_VALENCE_SHIFTS = [-0.4, 0.0, 0.4]
+# Lift keeps its three-stage progression, but each stage now targets a mood
+# (rather than a shifted valence point): the listener's own detected mood first,
+# then a step toward comfort, then a step toward happiness. No track is ever
+# reused across stages.
+LIFT_STAGE_MOODS_AFTER_FIRST = ["comfort", "happiness"]
+
+# A situation's related moods only ever add tracks AFTER the primary-mood list,
+# and only when the prompt's situation pick is confident enough to trust and the
+# primary list did not already fill the cap. Kept deliberately simple: no
+# separate cap tuning, no partial-credit scoring, just "still room? still
+# qualifies for a related mood? then it's next in line by probability."
+SITUATION_CONFIDENCE_GATE = 0.2
 
 
 class LibraryNotPreparedError(Exception):
@@ -184,13 +190,15 @@ class PlaylistRecommendation:
     excluded_instrumental: int
     excluded_no_profile: int
     qualifying_count: int = 0
-    threshold: float = MATCH_THRESHOLD
+    # The per-mood threshold used for the primary target mood; `None` for a mood
+    # (currently only `fear`) that uses the top-1 fallback instead of a threshold.
+    threshold: float | None = None
     playlist_contributions: list[PlaylistContribution] = field(default_factory=list)
     ranked_tracks: list[RankedLibraryTrack] = field(default_factory=list)
 
 
 class RecommendFromLibraryUseCase:
-    """Ranks a session's prepared library against a mood prompt using cached profiles."""
+    """Selects a session's prepared library against a mood prompt using cached profiles."""
 
     def __init__(
         self,
@@ -200,7 +208,7 @@ class RecommendFromLibraryUseCase:
         prompt_profiler: PromptProfiler,
         profile_version: str,
         max_tracks: int = DEFAULT_MAX_TRACKS,
-        match_threshold: float = MATCH_THRESHOLD,
+        policy: MoodSelectionPolicy | None = None,
     ) -> None:
         self._library_store = library_store
         self._lyrics_repository = lyrics_repository
@@ -208,7 +216,7 @@ class RecommendFromLibraryUseCase:
         self._prompt_profiler = prompt_profiler
         self._profile_version = profile_version
         self._max_tracks = max_tracks
-        self._match_threshold = match_threshold
+        self._policy = policy if policy is not None else load_selection_policy()
         self._situations = load_situations()
         self._tree = load_emotion_tree()
         self._moods = load_moods()
@@ -278,48 +286,35 @@ class RecommendFromLibraryUseCase:
 
         emit(RecommendPhase.RANKING_TRACKS, total=len(profiles_by_id))
 
-        related_families, _related_clusters = related_families_and_clusters(
-            self._tree, self._related_emotions(prompt_profile.situation.id)
+        target_mood_id = prompt_profile.mood.id
+        qualifying_count = sum(
+            1 for profile in profiles_by_id.values() if qualifies(profile, target_mood_id, self._policy)
         )
-        situation_related_moods = frozenset(
-            mood_id
-            for family_id in related_families
-            for mood_id in (self._moods.family_to_mood_id(family_id),)
-            if mood_id is not None
-        )
-        target = TargetProfile(
-            valence=prompt_profile.target_valence,
-            arousal=prompt_profile.target_arousal,
-            mood_id=prompt_profile.mood.id,
-            situation_id=prompt_profile.situation.id,
-            situation_related_moods=situation_related_moods,
-        )
-
-        base_ranked = [
-            RankedTrack(
-                track=tracks_by_id[track_id],
-                similarity=similarity(profile, target, self._moods),
-            )
-            for track_id, profile in profiles_by_id.items()
-        ]
-        qualifying_count = sum(1 for ranked in base_ranked if ranked.similarity >= self._match_threshold)
 
         if prompt_profile.strategy is Strategy.LIFT:
-            stages = self._lift_stages(tracks_by_id, profiles_by_id, target)
+            stages = self._lift_stages(tracks_by_id, profiles_by_id, target_mood_id)
         else:
-            stages = [self._single_stage(base_ranked)]
+            situation_related_moods = self._situation_related_moods(prompt_profile.situation.id)
+            stages = [
+                self._single_stage(
+                    tracks_by_id, profiles_by_id, target_mood_id, prompt_profile.situation.confidence,
+                    situation_related_moods,
+                )
+            ]
 
         emit(RecommendPhase.RANKING_TRACKS, len(profiles_by_id), len(profiles_by_id))
 
         result_track_ids = {ranked.track.id for stage in stages for ranked in stage.tracks}
-        similarity_by_id = {ranked.track.id: ranked.similarity for ranked in base_ranked}
+        keep_probability_by_id = {
+            track_id: keep_probability(profile, target_mood_id) for track_id, profile in profiles_by_id.items()
+        }
         ranked_tracks = [
             RankedLibraryTrack(
                 id=track.id,
                 name=track.name,
                 artist=track.artist,
                 cover_url=track.cover_url,
-                similarity=similarity_by_id.get(track.id),
+                similarity=keep_probability_by_id.get(track.id),
                 selected=track.id in result_track_ids,
             )
             for track in library.tracks
@@ -342,7 +337,7 @@ class RecommendFromLibraryUseCase:
             "RecommendFromLibrary session=%s strategy=%s ranked=%d qualifying=%d elapsed_ms=%.0f",
             session_id,
             prompt_profile.strategy.value,
-            len(base_ranked),
+            len(profiles_by_id),
             qualifying_count,
             elapsed_ms,
         )
@@ -356,7 +351,7 @@ class RecommendFromLibraryUseCase:
             excluded_instrumental=excluded_instrumental,
             excluded_no_profile=excluded_no_profile,
             qualifying_count=qualifying_count,
-            threshold=self._match_threshold,
+            threshold=self._policy.threshold_for(target_mood_id),
             playlist_contributions=playlist_contributions,
             ranked_tracks=ranked_tracks,
         )
@@ -391,46 +386,76 @@ class RecommendFromLibraryUseCase:
                 return situation.related_emotions
         return ()
 
-    def _single_stage(self, ranked: list[RankedTrack]) -> PlaylistStage:
-        qualifying = [r for r in ranked if r.similarity >= self._match_threshold]
-        qualifying.sort(key=lambda r: r.similarity, reverse=True)
-        deduped: dict[str, RankedTrack] = {}
-        for r in qualifying:
-            deduped.setdefault(r.track.id, r)
-        capped = list(deduped.values())[: self._max_tracks]
-        return PlaylistStage(name=SINGLE_STAGE_NAME, tracks=capped)
+    def _situation_related_moods(self, situation_id: str) -> frozenset[str]:
+        related_families, _related_clusters = related_families_and_clusters(
+            self._tree, self._related_emotions(situation_id)
+        )
+        return frozenset(
+            mood_id
+            for family_id in related_families
+            for mood_id in (self._moods.family_to_mood_id(family_id),)
+            if mood_id is not None
+        )
+
+    def _tracks_qualifying_for(
+        self,
+        tracks_by_id: dict[str, PlaylistTrack],
+        profiles_by_id: dict[str, TrackMoodProfile],
+        mood_id: str,
+        exclude_ids: set[str],
+        cap: int,
+    ) -> list[RankedTrack]:
+        """Every not-yet-used track qualifying for `mood_id`, best `p(mood_id)` first, capped."""
+
+        candidates = [
+            RankedTrack(track=tracks_by_id[track_id], similarity=keep_probability(profile, mood_id))
+            for track_id, profile in profiles_by_id.items()
+            if track_id not in exclude_ids and qualifies(profile, mood_id, self._policy)
+        ]
+        candidates.sort(key=lambda r: r.similarity, reverse=True)
+        return candidates[:cap]
+
+    def _single_stage(
+        self,
+        tracks_by_id: dict[str, PlaylistTrack],
+        profiles_by_id: dict[str, TrackMoodProfile],
+        target_mood_id: str,
+        situation_confidence: float,
+        situation_related_moods: frozenset[str],
+    ) -> PlaylistStage:
+        tracks = self._tracks_qualifying_for(tracks_by_id, profiles_by_id, target_mood_id, set(), self._max_tracks)
+
+        if len(tracks) < self._max_tracks and situation_confidence >= SITUATION_CONFIDENCE_GATE:
+            used_ids = {r.track.id for r in tracks}
+            bonus: list[RankedTrack] = []
+            for related_mood_id in situation_related_moods:
+                if related_mood_id == target_mood_id:
+                    continue
+                for ranked in self._tracks_qualifying_for(
+                    tracks_by_id, profiles_by_id, related_mood_id, used_ids, self._max_tracks - len(tracks)
+                ):
+                    bonus.append(ranked)
+                    used_ids.add(ranked.track.id)
+            bonus.sort(key=lambda r: r.similarity, reverse=True)
+            tracks = tracks + bonus[: self._max_tracks - len(tracks)]
+
+        return PlaylistStage(name=SINGLE_STAGE_NAME, tracks=tracks)
 
     def _lift_stages(
         self,
         tracks_by_id: dict[str, PlaylistTrack],
         profiles_by_id: dict[str, TrackMoodProfile],
-        base_target: TargetProfile,
+        target_mood_id: str,
     ) -> list[PlaylistStage]:
-        used_ids: set[str] = set()
+        stage_moods = [target_mood_id, *LIFT_STAGE_MOODS_AFTER_FIRST]
         per_stage_cap = max(1, self._max_tracks // len(LIFT_STAGE_NAMES))
+        used_ids: set[str] = set()
         stages: list[PlaylistStage] = []
 
-        for name, shift in zip(LIFT_STAGE_NAMES, LIFT_VALENCE_SHIFTS):
-            shifted_target = TargetProfile(
-                valence=max(-1.0, min(1.0, base_target.valence + shift)),
-                arousal=base_target.arousal,
-                mood_id=base_target.mood_id,
-                situation_id=base_target.situation_id,
-                situation_related_moods=base_target.situation_related_moods,
-            )
-
-            ranked = []
-            for track_id, profile in profiles_by_id.items():
-                if track_id in used_ids:
-                    continue
-                score = similarity(profile, shifted_target, self._moods)
-                if score >= self._match_threshold:
-                    ranked.append(RankedTrack(track=tracks_by_id[track_id], similarity=score))
-            ranked.sort(key=lambda r: r.similarity, reverse=True)
-
-            selected = ranked[:per_stage_cap]
-            for r in selected:
-                used_ids.add(r.track.id)
+        for name, mood_id in zip(LIFT_STAGE_NAMES, stage_moods):
+            selected = self._tracks_qualifying_for(tracks_by_id, profiles_by_id, mood_id, used_ids, per_stage_cap)
+            for ranked in selected:
+                used_ids.add(ranked.track.id)
             stages.append(PlaylistStage(name=name, tracks=selected))
 
         return stages

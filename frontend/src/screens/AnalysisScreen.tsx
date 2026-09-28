@@ -364,7 +364,8 @@ export function AnalysisScreen({ recommendStatus, result, onViewPlaylist }: Anal
       {showThreshold && result && (
         <div className="no-matches-message">
           <p className="no-matches-title">
-            Only {result.qualifying_count} songs matched at {Math.round(result.threshold * 100)}% or more
+            Only {result.qualifying_count} songs matched
+            {result.threshold !== null ? ` at ${Math.round(result.threshold * 100)}% or more` : ""}
           </p>
         </div>
       )}

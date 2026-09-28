@@ -10,13 +10,20 @@ title/artist, no excerpting), with `max_len` set to the multilingual
 checkpoint's own limit (1024 tokens). This replaces the earlier deep
 emotion-tree descent (polarity -> cluster -> family) and the excerpt heuristic.
 
-Both changes are backed by isolated-variable experiments on a 30-track
-hand-labeled set (see the mood-profiling-accuracy change history and
-`backend/eval/`): plain string state + full lyrics + the checkpoint's own
-`max_len` measurably beat dict state and a 500-char excerpt, and a single flat
-7-mood choice reached ~50% accuracy vs. ~25% for the 4-level family pick, while
-a binary positive/negative polarity choice reached ~83%. Average latency in
-that experiment was ~2.2s/track on CPU.
+Both changes were first validated by isolated-variable experiments on a
+30-track hand-labeled set (see the mood-profiling-accuracy change history and
+`backend/eval/`); average latency in that experiment was ~2.2s/track on CPU.
+
+Measured on a larger, 300-track user-labeled set (the DEV/TEST split used to
+fit `mood_dj/data/mood_selection_policy.json`): the flat 7-mood choice reaches
+~31% strict accuracy (~55% lenient, counting an adjacent mood as correct), and
+the binary positive/negative polarity question performs no better than chance
+-- it is stored (`TrackMoodProfile.positive_probability`) but no longer used in
+ranking. On the public MERGE lyrics benchmark, mapping its 7 moods onto the
+same 4 circumplex quadrants used here reaches 57.5% accuracy (macro-F1 0.57),
+against 0.71-0.75 for models trained directly on that benchmark. Treat the
+30-track numbers above as early direction only; the 300-track and MERGE numbers
+are the ones that informed shipping decisions.
 
 `choice` answers return `{"type": "choice", "choice": <key>, "probabilities": {...}}`;
 confidence is the probability of the chosen key. `noul` answers return

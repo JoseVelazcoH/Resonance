@@ -151,7 +151,10 @@ class PlaylistRecommendResponse(BaseModel):
     detected: DetectedResponse
     excluded: ExcludedResponse
     qualifying_count: int = 0
-    threshold: float = 0.65
+    # The per-mood probability threshold used for the primary target mood; null
+    # for a mood (currently only "fear") that has no reliable threshold and
+    # instead uses a top-1 fallback (see mood_dj.domain.mood_selection_policy).
+    threshold: float | None = 0.0
     playlist_contributions: list[PlaylistContributionResponse] = []
     ranked_tracks: list[RankedTrackResponse] = []
 

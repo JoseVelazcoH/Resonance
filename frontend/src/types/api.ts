@@ -185,7 +185,10 @@ export interface PlaylistRecommendResponse {
   detected: Detected;
   excluded: Excluded;
   qualifying_count: number;
-  threshold: number;
+  // Per-mood probability threshold used for the target mood; null when the
+  // mood (currently only "fear") has no reliable threshold and instead uses a
+  // top-1 fallback.
+  threshold: number | null;
   playlist_contributions: PlaylistContribution[];
   ranked_tracks: RankedTrack[];
 }

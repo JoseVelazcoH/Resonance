@@ -4,7 +4,7 @@ Marked `laya` so it is skipped by default (downloads real model weights and runs
 actual inference). Run explicitly with: `uv run pytest -m laya`.
 
 Prints each prompt's RAW (unblended) direct valence/arousal score -- the same
-miscalibrated question type used per-track (see `mood_dj.domain.track_ranking`)
+miscalibrated question type used per-track (see `mood_dj.domain.mood_selection_policy`)
 -- across ~8 varied prompts, so bias on the prompt side can be inspected
 alongside the per-track evidence. No strict numeric assertions beyond basic
 range sanity: this is a diagnostic, not a regression test of exact model output.

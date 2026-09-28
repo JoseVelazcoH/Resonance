@@ -1,4 +1,4 @@
-"""Unit tests for RecommendFromLibraryUseCase, using in-memory fakes (flat-mood schema)."""
+"""Unit tests for RecommendFromLibraryUseCase (precision-first per-mood selection)."""
 
 from __future__ import annotations
 
@@ -11,16 +11,24 @@ from mood_dj.application.recommend_from_library import (
     RecommendPhase,
 )
 from mood_dj.domain.models import LyricsEntry, LyricsStatus, PlaylistSummary, PlaylistTrack, Strategy, TrackMoodProfile
+from mood_dj.domain.mood_selection_policy import MoodSelectionPolicy
 from mood_dj.domain.playlist_strategy import PlaylistSignals
 from mood_dj.domain.prompt_profile import EmotionPick, MoodPick, PromptProfile, SituationPick
 
 VERSION = "v1"
 
-# happiness's real moods.json centroid (see mood_dj/data/moods.json), used so a
-# track profiled with this exact mood/positive_probability is a perfect match.
-HAPPINESS_VALENCE = 0.55
-HAPPINESS_AROUSAL = 0.512
-HAPPINESS_POSITIVE_PROBABILITY = 0.85
+TEST_POLICY = MoodSelectionPolicy(
+    meta={},
+    thresholds={
+        "love": 0.72,
+        "happiness": 0.08,
+        "comfort": 0.18,
+        "sadness": 0.14,
+        "loneliness": 0.16,
+        "anger": 0.50,
+        "fear": None,
+    },
+)
 
 
 def _track(track_id: str) -> PlaylistTrack:
@@ -30,18 +38,14 @@ def _track(track_id: str) -> PlaylistTrack:
     )
 
 
-def _profile(
-    track_id: str,
-    mood_id: str = "happiness",
-    positive_probability: float = HAPPINESS_POSITIVE_PROBABILITY,
-) -> TrackMoodProfile:
+def _profile(track_id: str, mood_id: str = "happiness", probability: float = 1.0) -> TrackMoodProfile:
     return TrackMoodProfile(
         track_id=track_id,
         mood_id=mood_id,
-        mood_confidence=0.9,
-        positive_probability=positive_probability,
+        mood_confidence=probability,
+        positive_probability=0.5,
         version=VERSION,
-        mood_probabilities={mood_id: 1.0},
+        mood_probabilities={mood_id: probability},
     )
 
 
@@ -70,6 +74,15 @@ class FakeMoodProfileRepository:
         self._profiles[profile.track_id] = profile
 
 
+# Confidence below the situation-bonus gate (0.2), so tests that don't care about
+# the situation bonus don't accidentally trigger it via a real taxonomy lookup.
+NEUTRAL_SITUATION = SituationPick(id="movie_night", label="Movie night", confidence=0.1, valence=0.4, arousal=-0.35)
+# movie_night's related_emotions resolve (through the real taxonomy) to the
+# "comfort" mood -- used by the dedicated situation-bonus tests below.
+HIGH_CONFIDENCE_SITUATION = SituationPick(
+    id="movie_night", label="Movie night", confidence=0.5, valence=0.4, arousal=-0.35
+)
+
 ACCOMPANY_SIGNALS = PlaylistSignals(feels_bad=True, wants_change=False, wants_energy=False, wants_rest=False)
 LIFT_SIGNALS = PlaylistSignals(feels_bad=True, wants_change=True, wants_energy=False, wants_rest=False)
 
@@ -78,9 +91,9 @@ NEUTRAL_EMOTION = EmotionPick(
     family_id="family-a", cluster_id="cluster-a", polarity_id="positive",
     valence=0.0, arousal=0.0,
 )
-NEUTRAL_SITUATION = SituationPick(id="movie_night", label="Movie night", confidence=0.8, valence=0.4, arousal=-0.35)
 HAPPINESS_MOOD = MoodPick(id="happiness", label="Felicidad")
 SADNESS_MOOD = MoodPick(id="sadness", label="Tristeza")
+ANGER_MOOD = MoodPick(id="anger", label="Ira")
 
 
 class FakePromptProfiler:
@@ -94,9 +107,10 @@ class FakePromptProfiler:
 
 
 def _accompany_profile(
-    target_valence: float = HAPPINESS_VALENCE,
-    target_arousal: float = HAPPINESS_AROUSAL,
     mood: MoodPick = HAPPINESS_MOOD,
+    situation: SituationPick = NEUTRAL_SITUATION,
+    target_valence: float = 0.55,
+    target_arousal: float = 0.512,
 ) -> PromptProfile:
     return PromptProfile(
         signals=ACCOMPANY_SIGNALS,
@@ -105,7 +119,7 @@ def _accompany_profile(
         target_valence=target_valence,
         target_arousal=target_arousal,
         emotion=NEUTRAL_EMOTION,
-        situation=NEUTRAL_SITUATION,
+        situation=situation,
         mood=mood,
     )
 
@@ -123,7 +137,7 @@ def _lift_profile() -> PromptProfile:
     )
 
 
-def _use_case(library_store, repo, mood_profile_repository, prompt_profiler, max_tracks=30):
+def _use_case(library_store, repo, mood_profile_repository, prompt_profiler, max_tracks=30, policy=TEST_POLICY):
     return RecommendFromLibraryUseCase(
         library_store=library_store,
         lyrics_repository=repo,
@@ -131,6 +145,7 @@ def _use_case(library_store, repo, mood_profile_repository, prompt_profiler, max
         prompt_profiler=prompt_profiler,
         profile_version=VERSION,
         max_tracks=max_tracks,
+        policy=policy,
     )
 
 
@@ -175,7 +190,7 @@ def test_run_raises_when_no_track_has_a_profile() -> None:
         use_case.run("session-1", "I feel sad")
 
 
-def test_only_tracks_at_or_above_threshold_are_included() -> None:
+def test_only_tracks_meeting_the_moods_threshold_are_included() -> None:
     store = LibraryStore()
     store.save("session-1", {}, [_track("good"), _track("bad")])
     repo = FakeLyricsRepository(
@@ -184,22 +199,64 @@ def test_only_tracks_at_or_above_threshold_are_included() -> None:
             "bad": LyricsEntry("bad", LyricsStatus.LYRICS, "la", "now"),
         }
     )
-    # "good" matches the target's mood/polarity exactly; "bad" is the opposite
-    # mood with the opposite polarity, maximally far away.
     profiles = FakeMoodProfileRepository(
         {
-            "good": _profile("good", mood_id="happiness", positive_probability=HAPPINESS_POSITIVE_PROBABILITY),
-            "bad": _profile("bad", mood_id="sadness", positive_probability=0.1),
+            "good": _profile("good", mood_id="happiness", probability=0.9),
+            "bad": _profile("bad", mood_id="sadness", probability=1.0),
         }
     )
-    use_case = _use_case(store, repo, profiles, FakePromptProfiler(_accompany_profile()))
+    use_case = _use_case(store, repo, profiles, FakePromptProfiler(_accompany_profile(mood=HAPPINESS_MOOD)))
 
-    result = use_case.run("session-1", "I feel sad")
+    result = use_case.run("session-1", "I feel great")
 
     track_ids = [ranked.track.id for stage in result.stages for ranked in stage.tracks]
     assert track_ids == ["good"]
     assert result.qualifying_count == 1
-    assert result.threshold == pytest.approx(0.65)
+    assert result.threshold == pytest.approx(0.08)
+
+
+def test_keep_probability_surfaced_per_track_is_the_targets_mood_probability() -> None:
+    store = LibraryStore()
+    store.save("session-1", {}, [_track("a")])
+    repo = FakeLyricsRepository({"a": LyricsEntry("a", LyricsStatus.LYRICS, "la", "now")})
+    profiles = FakeMoodProfileRepository({"a": _profile("a", mood_id="happiness", probability=0.42)})
+    use_case = _use_case(store, repo, profiles, FakePromptProfiler(_accompany_profile(mood=HAPPINESS_MOOD)))
+
+    result = use_case.run("session-1", "prompt")
+
+    ranked = result.stages[0].tracks[0]
+    assert ranked.similarity == pytest.approx(0.42)
+
+
+def test_fear_target_uses_top1_fallback_instead_of_a_probability_threshold() -> None:
+    store = LibraryStore()
+    store.save("session-1", {}, [_track("top1_fear"), _track("mixed_fear")])
+    repo = FakeLyricsRepository(
+        {
+            "top1_fear": LyricsEntry("top1_fear", LyricsStatus.LYRICS, "la", "now"),
+            "mixed_fear": LyricsEntry("mixed_fear", LyricsStatus.LYRICS, "la", "now"),
+        }
+    )
+    profiles = FakeMoodProfileRepository(
+        {
+            "top1_fear": TrackMoodProfile(
+                track_id="top1_fear", mood_id="fear", mood_confidence=0.6, positive_probability=0.2,
+                version=VERSION, mood_probabilities={"fear": 0.6, "anger": 0.4},
+            ),
+            "mixed_fear": TrackMoodProfile(
+                track_id="mixed_fear", mood_id="anger", mood_confidence=0.55, positive_probability=0.2,
+                version=VERSION, mood_probabilities={"fear": 0.45, "anger": 0.55},
+            ),
+        }
+    )
+    fear_mood = MoodPick(id="fear", label="Miedo")
+    use_case = _use_case(store, repo, profiles, FakePromptProfiler(_accompany_profile(mood=fear_mood)))
+
+    result = use_case.run("session-1", "I'm scared")
+
+    track_ids = [ranked.track.id for stage in result.stages for ranked in stage.tracks]
+    assert track_ids == ["top1_fear"]
+    assert result.threshold is None
 
 
 def test_caps_tracks_to_max_tracks() -> None:
@@ -207,8 +264,10 @@ def test_caps_tracks_to_max_tracks() -> None:
     tracks = [_track(str(i)) for i in range(50)]
     store.save("session-1", {}, tracks)
     repo = FakeLyricsRepository({t.id: LyricsEntry(t.id, LyricsStatus.LYRICS, "la", "now") for t in tracks})
-    profiles = FakeMoodProfileRepository({t.id: _profile(t.id) for t in tracks})
-    use_case = _use_case(store, repo, profiles, FakePromptProfiler(_accompany_profile()), max_tracks=10)
+    profiles = FakeMoodProfileRepository({t.id: _profile(t.id, mood_id="happiness", probability=0.9) for t in tracks})
+    use_case = _use_case(
+        store, repo, profiles, FakePromptProfiler(_accompany_profile(mood=HAPPINESS_MOOD)), max_tracks=10
+    )
 
     result = use_case.run("session-1", "prompt")
 
@@ -216,16 +275,16 @@ def test_caps_tracks_to_max_tracks() -> None:
     assert total_tracks <= 10
 
 
-def test_lift_strategy_builds_three_stages_without_repeating_tracks() -> None:
+def test_lift_strategy_targets_sadness_then_comfort_then_happiness_without_repeating() -> None:
     store = LibraryStore()
     tracks = [_track("sad"), _track("mid"), _track("happy")]
     store.save("session-1", {}, tracks)
     repo = FakeLyricsRepository({t.id: LyricsEntry(t.id, LyricsStatus.LYRICS, "la", "now") for t in tracks})
     profiles = FakeMoodProfileRepository(
         {
-            "sad": _profile("sad", mood_id="sadness", positive_probability=0.1),
-            "mid": _profile("mid", mood_id="comfort", positive_probability=0.5),
-            "happy": _profile("happy", mood_id="happiness", positive_probability=0.9),
+            "sad": _profile("sad", mood_id="sadness", probability=1.0),
+            "mid": _profile("mid", mood_id="comfort", probability=1.0),
+            "happy": _profile("happy", mood_id="happiness", probability=1.0),
         }
     )
     use_case = _use_case(store, repo, profiles, FakePromptProfiler(_lift_profile()))
@@ -234,11 +293,128 @@ def test_lift_strategy_builds_three_stages_without_repeating_tracks() -> None:
 
     assert result.strategy is Strategy.LIFT
     assert [stage.name for stage in result.stages] == ["melancholic", "hopeful", "positive"]
+    assert [ranked.track.id for ranked in result.stages[0].tracks] == ["sad"]
+    assert [ranked.track.id for ranked in result.stages[1].tracks] == ["mid"]
+    assert [ranked.track.id for ranked in result.stages[2].tracks] == ["happy"]
     seen_ids: list[str] = []
     for stage in result.stages:
         for ranked in stage.tracks:
             assert ranked.track.id not in seen_ids
             seen_ids.append(ranked.track.id)
+
+
+def test_lift_first_stage_targets_the_prompts_detected_mood_not_a_fixed_mood() -> None:
+    store = LibraryStore()
+    tracks = [_track("angry"), _track("mid"), _track("happy")]
+    store.save("session-1", {}, tracks)
+    repo = FakeLyricsRepository({t.id: LyricsEntry(t.id, LyricsStatus.LYRICS, "la", "now") for t in tracks})
+    profiles = FakeMoodProfileRepository(
+        {
+            "angry": _profile("angry", mood_id="anger", probability=1.0),
+            "mid": _profile("mid", mood_id="comfort", probability=1.0),
+            "happy": _profile("happy", mood_id="happiness", probability=1.0),
+        }
+    )
+    lift_profile = _lift_profile()
+    angry_profile = PromptProfile(
+        signals=lift_profile.signals,
+        signal_probabilities=lift_profile.signal_probabilities,
+        strategy=Strategy.LIFT,
+        target_valence=-0.6,
+        target_arousal=0.55,
+        emotion=NEUTRAL_EMOTION,
+        situation=NEUTRAL_SITUATION,
+        mood=ANGER_MOOD,
+    )
+    use_case = _use_case(store, repo, profiles, FakePromptProfiler(angry_profile))
+
+    result = use_case.run("session-1", "I'm furious but want to calm down")
+
+    assert [ranked.track.id for ranked in result.stages[0].tracks] == ["angry"]
+
+
+def test_situation_bonus_adds_tracks_after_the_primary_list_when_below_cap() -> None:
+    store = LibraryStore()
+    store.save("session-1", {}, [_track("primary"), _track("bonus")])
+    repo = FakeLyricsRepository(
+        {
+            "primary": LyricsEntry("primary", LyricsStatus.LYRICS, "la", "now"),
+            "bonus": LyricsEntry("bonus", LyricsStatus.LYRICS, "la", "now"),
+        }
+    )
+    profiles = FakeMoodProfileRepository(
+        {
+            "primary": _profile("primary", mood_id="happiness", probability=0.9),
+            # "bonus" doesn't qualify for happiness, but does for "comfort", which
+            # movie_night's related_emotions resolve to.
+            "bonus": _profile("bonus", mood_id="comfort", probability=0.9),
+        }
+    )
+    use_case = _use_case(
+        store, repo, profiles,
+        FakePromptProfiler(_accompany_profile(mood=HAPPINESS_MOOD, situation=HIGH_CONFIDENCE_SITUATION)),
+        max_tracks=10,
+    )
+
+    result = use_case.run("session-1", "prompt")
+
+    track_ids = [ranked.track.id for stage in result.stages for ranked in stage.tracks]
+    assert track_ids == ["primary", "bonus"]
+
+
+def test_situation_bonus_is_skipped_below_the_confidence_gate() -> None:
+    store = LibraryStore()
+    store.save("session-1", {}, [_track("primary"), _track("bonus")])
+    repo = FakeLyricsRepository(
+        {
+            "primary": LyricsEntry("primary", LyricsStatus.LYRICS, "la", "now"),
+            "bonus": LyricsEntry("bonus", LyricsStatus.LYRICS, "la", "now"),
+        }
+    )
+    profiles = FakeMoodProfileRepository(
+        {
+            "primary": _profile("primary", mood_id="happiness", probability=0.9),
+            "bonus": _profile("bonus", mood_id="comfort", probability=0.9),
+        }
+    )
+    # NEUTRAL_SITUATION's confidence (0.1) is below the 0.2 gate.
+    use_case = _use_case(
+        store, repo, profiles,
+        FakePromptProfiler(_accompany_profile(mood=HAPPINESS_MOOD, situation=NEUTRAL_SITUATION)),
+        max_tracks=10,
+    )
+
+    result = use_case.run("session-1", "prompt")
+
+    track_ids = [ranked.track.id for stage in result.stages for ranked in stage.tracks]
+    assert track_ids == ["primary"]
+
+
+def test_situation_bonus_is_skipped_once_the_primary_list_fills_the_cap() -> None:
+    store = LibraryStore()
+    store.save("session-1", {}, [_track("primary"), _track("bonus")])
+    repo = FakeLyricsRepository(
+        {
+            "primary": LyricsEntry("primary", LyricsStatus.LYRICS, "la", "now"),
+            "bonus": LyricsEntry("bonus", LyricsStatus.LYRICS, "la", "now"),
+        }
+    )
+    profiles = FakeMoodProfileRepository(
+        {
+            "primary": _profile("primary", mood_id="happiness", probability=0.9),
+            "bonus": _profile("bonus", mood_id="comfort", probability=0.9),
+        }
+    )
+    use_case = _use_case(
+        store, repo, profiles,
+        FakePromptProfiler(_accompany_profile(mood=HAPPINESS_MOOD, situation=HIGH_CONFIDENCE_SITUATION)),
+        max_tracks=1,
+    )
+
+    result = use_case.run("session-1", "prompt")
+
+    track_ids = [ranked.track.id for stage in result.stages for ranked in stage.tracks]
+    assert track_ids == ["primary"]
 
 
 def test_reports_understanding_and_ranking_phases() -> None:
@@ -260,7 +436,7 @@ def test_detected_fields_reflect_the_prompt_profile() -> None:
     store.save("session-1", {}, [_track("a")])
     repo = FakeLyricsRepository({"a": LyricsEntry("a", LyricsStatus.LYRICS, "la", "now")})
     profiles = FakeMoodProfileRepository({"a": _profile("a")})
-    prompt_profile = _accompany_profile(0.2, -0.1)
+    prompt_profile = _accompany_profile(target_valence=0.2, target_arousal=-0.1)
     use_case = _use_case(store, repo, profiles, FakePromptProfiler(prompt_profile))
 
     result = use_case.run("session-1", "prompt")
@@ -348,11 +524,11 @@ def test_ranked_tracks_cover_the_whole_library_in_library_order() -> None:
     # qualify; "c" has no lyrics so it never gets a profile at all.
     profiles = FakeMoodProfileRepository(
         {
-            "a": _profile("a", mood_id="happiness", positive_probability=HAPPINESS_POSITIVE_PROBABILITY),
-            "b": _profile("b", mood_id="sadness", positive_probability=0.1),
+            "a": _profile("a", mood_id="happiness", probability=0.9),
+            "b": _profile("b", mood_id="sadness", probability=1.0),
         }
     )
-    use_case = _use_case(store, repo, profiles, FakePromptProfiler(_accompany_profile()))
+    use_case = _use_case(store, repo, profiles, FakePromptProfiler(_accompany_profile(mood=HAPPINESS_MOOD)))
 
     result = use_case.run("session-1", "I feel sad")
 

@@ -269,7 +269,7 @@ def related_families_and_clusters(
     """Map a situation's `related_emotions` ids to the families/clusters they live in.
 
     Tracks no longer carry a situation pick (see `laya_track_profiler.py`, v3),
-    so ranking (`mood_dj.domain.track_ranking`) matches a target situation's
+    so ranking (`mood_dj.domain.mood_selection_policy`) matches a target situation's
     related emotions against a track's own family/cluster instead. Unknown
     emotion ids are silently skipped.
     """
