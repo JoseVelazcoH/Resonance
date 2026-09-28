@@ -170,6 +170,14 @@ Run `make` to list every command.
 
 <br>
 
+## <img src="https://api.iconify.design/lucide/book-open.svg?color=%231DB954" width="20" height="20">&nbsp; Community
+- [Contributing](docs/CONTRIBUTING.md)
+- [Commit convention](docs/commits-convention.md)
+- [Code of conduct](docs/CODE_OF_CONDUCT.md)
+- [Security policy](docs/SECURITY.md)
+
+<br>
+
 ## <img src="https://api.iconify.design/lucide/heart-handshake.svg?color=%231DB954" width="20" height="20">&nbsp; Acknowledgements
 - [Laya](https://huggingface.co/convaiinnovations/laya) by Convai Innovations: the decision model behind every choice
 - [LRCLIB](https://lrclib.net): open lyrics that make this possible without scraping
@@ -179,14 +187,6 @@ Run `make` to list every command.
 
 > [!IMPORTANT]
 > The first run can take several minutes. Resonance downloads the lyrics of every song in your library and reads their mood with Laya on your CPU. Everything is cached in SQLite, so later runs only process new songs.
-
-<br>
-
-## <img src="https://api.iconify.design/lucide/book-open.svg?color=%231DB954" width="20" height="20">&nbsp; Community
-- [Contributing](docs/CONTRIBUTING.md)
-- [Commit convention](docs/commits-convention.md)
-- [Code of conduct](docs/CODE_OF_CONDUCT.md)
-- [Security policy](docs/SECURITY.md)
 
 <br>
 
